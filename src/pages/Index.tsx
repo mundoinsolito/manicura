@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { PublicLayout } from '@/components/PublicLayout';
 import { useServices } from '@/hooks/useServices';
 import { useSettings } from '@/hooks/useSettings';
@@ -8,12 +9,41 @@ import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { Calendar, Sparkles, Heart, Star } from 'lucide-react';
 
+interface FeatureTag {
+  id: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+}
+
+const defaultFeatureTags: FeatureTag[] = [
+  { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
+  { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
+  { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
+];
+
+const featureIcons = [Star, Heart, Calendar];
+
 const Index = () => {
   const { services, loading: servicesLoading } = useServices();
   const { settings } = useSettings();
   const { activePromotions } = usePromotions();
 
+  const [featureTags, setFeatureTags] = useState<FeatureTag[]>(defaultFeatureTags);
+
+  useEffect(() => {
+    const savedTags = localStorage.getItem('featureTags');
+    if (savedTags) {
+      try {
+        setFeatureTags(JSON.parse(savedTags));
+      } catch (e) {
+        console.error('Error parsing feature tags:', e);
+      }
+    }
+  }, []);
+
   const activeServices = services.filter(s => s.is_active);
+  const enabledFeatureTags = featureTags.filter(tag => tag.enabled);
 
   return (
     <PublicLayout>
@@ -63,31 +93,26 @@ const Index = () => {
       {/* Features */}
       <section className="py-16 bg-background">
         <div className="container mx-auto px-4">
+          {enabledFeatureTags.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center p-6 rounded-2xl card-gradient shadow-card animate-slide-up">
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full accent-gradient flex items-center justify-center shadow-soft">
-                <Star className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <h3 className="font-display text-lg font-semibold mb-2">Calidad Premium</h3>
-              <p className="text-muted-foreground text-sm">Productos de primera calidad para el mejor resultado</p>
-            </div>
-            
-            <div className="text-center p-6 rounded-2xl card-gradient shadow-card animate-slide-up" style={{ animationDelay: '0.1s' }}>
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full accent-gradient flex items-center justify-center shadow-soft">
-                <Heart className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <h3 className="font-display text-lg font-semibold mb-2">Atención Personalizada</h3>
-              <p className="text-muted-foreground text-sm">Cada clienta es única, cada servicio es especial</p>
-            </div>
-            
-            <div className="text-center p-6 rounded-2xl card-gradient shadow-card animate-slide-up" style={{ animationDelay: '0.2s' }}>
-              <div className="w-14 h-14 mx-auto mb-4 rounded-full accent-gradient flex items-center justify-center shadow-soft">
-                <Calendar className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <h3 className="font-display text-lg font-semibold mb-2">Reserva Fácil</h3>
-              <p className="text-muted-foreground text-sm">Agenda tu cita en segundos desde tu celular</p>
-            </div>
+              {enabledFeatureTags.map((tag, index) => {
+                const IconComponent = featureIcons[index % featureIcons.length];
+                return (
+                  <div 
+                    key={tag.id} 
+                    className="text-center p-6 rounded-2xl card-gradient shadow-card animate-slide-up"
+                    style={{ animationDelay: `${index * 0.1}s` }}
+                  >
+                    <div className="w-14 h-14 mx-auto mb-4 rounded-full accent-gradient flex items-center justify-center shadow-soft">
+                      <IconComponent className="w-6 h-6 text-primary-foreground" />
+                    </div>
+                    <h3 className="font-display text-lg font-semibold mb-2">{tag.title}</h3>
+                    <p className="text-muted-foreground text-sm">{tag.description}</p>
+                  </div>
+                );
+              })}
           </div>
+          )}
         </div>
       </section>
 

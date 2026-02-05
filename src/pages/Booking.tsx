@@ -14,7 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format, addDays, isBefore, startOfToday, parseISO, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 type Step = 'service' | 'datetime' | 'info' | 'confirm';
@@ -34,11 +34,12 @@ export default function BookingPage() {
   const navigate = useNavigate();
   const { services } = useServices();
   const { settings } = useSettings();
-  const { appointments } = useAppointments();
+  const { appointments, addAppointment } = useAppointments();
   const { isTimeBlocked, blockedTimes } = useBlockedTimes();
   const { findClientByPhone, addClient } = useClients();
 
   const [step, setStep] = useState<Step>('service');
+  const [submitting, setSubmitting] = useState(false);
   const [booking, setBooking] = useState<BookingData>({
     serviceId: searchParams.get('service') || '',
     date: undefined,
@@ -141,10 +142,71 @@ export default function BookingPage() {
     return encodeURIComponent(message);
   };
 
-  const handleWhatsAppClick = () => {
+  const handleWhatsAppClick = async () => {
+    if (!selectedService || !booking.date) return;
+    
+    setSubmitting(true);
+    
+    try {
+      // First, find or create client
+      let clientId = '';
+      const existingClient = await findClientByPhone(booking.phone);
+      
+      if (existingClient) {
+        clientId = existingClient.id;
+      } else {
+        // Add new client
+        const clientResult = await addClient({
+          name: booking.name,
+          phone: booking.phone,
+          cedula: booking.cedula,
+          email: null,
+          health_alerts: null,
+          preferences: null,
+          favorite_colors: null,
+          nail_shape: null,
+          notes: null,
+        });
+        
+        if (clientResult.success && clientResult.data) {
+          clientId = clientResult.data.id;
+        } else {
+          throw new Error('Error al crear cliente');
+        }
+      }
+      
+      // Create the appointment with pending status
+      const paymentAmount = booking.paymentType === 'full' 
+        ? selectedService.price 
+        : settings.reservation_amount;
+      
+      const appointmentResult = await addAppointment({
+        client_id: clientId,
+        service_id: booking.serviceId,
+        date: format(booking.date, 'yyyy-MM-dd'),
+        time: booking.time,
+        status: 'pending',
+        payment_status: 'pending',
+        payment_amount: paymentAmount,
+        notes: `Cédula: ${booking.cedula}`,
+      });
+      
+      if (!appointmentResult.success) {
+        throw new Error('Error al crear la cita');
+      }
+      
+      // Open WhatsApp
     const phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
     const message = getWhatsAppMessage();
     window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+      
+      toast.success('¡Cita registrada! Envía tu comprobante para confirmar.');
+    } catch (error) {
+      console.error('Error creating appointment:', error);
+      toast.error('Error al registrar la cita');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const steps = ['service', 'datetime', 'info', 'confirm'] as const;
@@ -455,9 +517,14 @@ export default function BookingPage() {
                       <Button 
                         onClick={handleWhatsAppClick}
                         className="w-full bg-green-600 hover:bg-green-700 text-white"
+                        disabled={submitting}
                       >
-                        <MessageCircle className="w-4 h-4 mr-2" />
-                        Enviar por WhatsApp
+                        {submitting ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                        )}
+                        {submitting ? 'Procesando...' : 'Completar y enviar por WhatsApp'}
                       </Button>
                     </div>
                   </div>

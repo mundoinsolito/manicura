@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { useSettings } from '@/hooks/useSettings';
 import { ImageUpload } from '@/components/ImageUpload';
@@ -7,8 +7,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Store, Clock, DollarSign, Palette, Phone, Save, Loader2 } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
+import { Store, Clock, DollarSign, Palette, Phone, Save, Loader2, Sparkles, X, Plus } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface FeatureTag {
+  id: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+}
 
 export default function AdminSettings() {
   const { settings, loading, updateSettings } = useSettings();
@@ -25,8 +34,26 @@ export default function AdminSettings() {
     accent_color: settings.accent_color,
   });
 
+  const [featureTags, setFeatureTags] = useState<FeatureTag[]>([
+    { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
+    { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
+    { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
+  ]);
+
+  // Load saved feature tags from localStorage
+  useEffect(() => {
+    const savedTags = localStorage.getItem('featureTags');
+    if (savedTags) {
+      try {
+        setFeatureTags(JSON.parse(savedTags));
+      } catch (e) {
+        console.error('Error parsing feature tags:', e);
+      }
+    }
+  }, []);
+
   // Update form when settings load
-  useState(() => {
+  useEffect(() => {
     if (!loading) {
       setForm({
         business_name: settings.business_name,
@@ -39,10 +66,19 @@ export default function AdminSettings() {
         accent_color: settings.accent_color,
       });
     }
-  });
+  }, [loading, settings]);
+
+  const updateFeatureTag = (id: string, updates: Partial<FeatureTag>) => {
+    setFeatureTags(tags => tags.map(tag => 
+      tag.id === id ? { ...tag, ...updates } : tag
+    ));
+  };
 
   const handleSave = async () => {
     setSaving(true);
+    
+    // Save feature tags to localStorage
+    localStorage.setItem('featureTags', JSON.stringify(featureTags));
     
     const result = await updateSettings({
       business_name: form.business_name,
@@ -218,6 +254,43 @@ export default function AdminSettings() {
                 Este es el monto mínimo que las clientas deben pagar para confirmar su cita
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Feature Tags */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Características Destacadas
+            </CardTitle>
+            <CardDescription>
+              Edita o desactiva las características que aparecen en la página principal
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {featureTags.map((tag) => (
+              <div key={tag.id} className="flex items-start gap-4 p-4 rounded-lg border border-border">
+                <Switch
+                  checked={tag.enabled}
+                  onCheckedChange={(checked) => updateFeatureTag(tag.id, { enabled: checked })}
+                />
+                <div className="flex-1 space-y-2">
+                  <Input
+                    value={tag.title}
+                    onChange={(e) => updateFeatureTag(tag.id, { title: e.target.value })}
+                    placeholder="Título"
+                    className="font-semibold"
+                  />
+                  <Textarea
+                    value={tag.description}
+                    onChange={(e) => updateFeatureTag(tag.id, { description: e.target.value })}
+                    placeholder="Descripción"
+                    rows={2}
+                  />
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
 
