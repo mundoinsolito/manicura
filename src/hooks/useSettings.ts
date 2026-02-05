@@ -4,6 +4,7 @@ import { supabase, Settings } from '@/lib/supabase';
 const defaultSettings: Settings = {
   id: '1',
   business_name: 'Manicura Elegante',
+  logo_url: null,
   cover_image_url: null,
   whatsapp_number: '+58412000000',
   reservation_amount: 10,
