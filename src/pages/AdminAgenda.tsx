@@ -11,9 +11,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths } from 'date-fns';
+import { Separator } from '@/components/ui/separator';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, isFuture, parseISO as parseDate } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Check, X, Trash2 } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Check, X, Trash2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminAgenda() {
@@ -29,6 +30,17 @@ export default function AdminAgenda() {
     start_time: settings.opening_time,
     end_time: settings.closing_time,
     reason: '',
+  });
+
+  // Get pending appointments
+  const pendingAppointments = appointments.filter(a => a.status === 'pending');
+  const upcomingAppointments = appointments.filter(a => 
+    a.status !== 'cancelled' && 
+    (isFuture(parseISO(a.date)) || isToday(parseISO(a.date)))
+  ).sort((a, b) => {
+    const dateCompare = a.date.localeCompare(b.date);
+    if (dateCompare !== 0) return dateCompare;
+    return a.time.localeCompare(b.time);
   });
 
   const monthDays = eachDayOfInterval({
@@ -348,6 +360,127 @@ export default function AdminAgenda() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Pending Appointments Section */}
+        {pendingAppointments.length > 0 && (
+          <Card className="border-amber-200 bg-amber-50/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-amber-800">
+                <AlertCircle className="w-5 h-5" />
+                Reservas Pendientes de Aprobación ({pendingAppointments.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {pendingAppointments.map((apt) => (
+                  <div 
+                    key={apt.id}
+                    className="p-4 rounded-lg border border-amber-200 bg-white flex flex-col sm:flex-row sm:items-center gap-4"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-foreground">{apt.client?.name || 'Cliente'}</span>
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pendiente</Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {apt.service?.name} • {format(parseISO(apt.date), "d 'de' MMMM", { locale: es })} a las {apt.time}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Tel: {apt.client?.phone} • Monto: ${apt.payment_amount}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                        onClick={() => handleStatusChange(apt.id, 'confirmed')}
+                      >
+                        <CheckCircle className="w-4 h-4 mr-1" />
+                        Aceptar
+                      </Button>
+                      <Button 
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => handleStatusChange(apt.id, 'cancelled')}
+                      >
+                        <XCircle className="w-4 h-4 mr-1" />
+                        Rechazar
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* All Upcoming Appointments List */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="w-5 h-5 text-primary" />
+              Próximas Citas ({upcomingAppointments.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {upcomingAppointments.length > 0 ? (
+              <div className="space-y-3">
+                {upcomingAppointments.map((apt) => (
+                  <div 
+                    key={apt.id}
+                    className="p-4 rounded-lg border bg-card flex flex-col sm:flex-row sm:items-center gap-4"
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-foreground">{apt.client?.name || 'Cliente'}</span>
+                        <Badge className={statusColors[apt.status]}>
+                          {statusLabels[apt.status]}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {apt.service?.name} • {apt.service?.duration} min
+                      </p>
+                      <p className="text-sm font-medium text-foreground">
+                        {format(parseISO(apt.date), "EEEE d 'de' MMMM", { locale: es })} a las {apt.time}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Tel: {apt.client?.phone}
+                      </p>
+                    </div>
+                    <div className="flex gap-2 items-center">
+                      <Select
+                        value={apt.status}
+                        onValueChange={(v) => handleStatusChange(apt.id, v)}
+                      >
+                        <SelectTrigger className="w-36">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pendiente</SelectItem>
+                          <SelectItem value="confirmed">Confirmada</SelectItem>
+                          <SelectItem value="completed">Completada</SelectItem>
+                          <SelectItem value="cancelled">Cancelada</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button 
+                        variant="ghost" 
+                        size="icon"
+                        className="text-destructive"
+                        onClick={() => handleDeleteAppointment(apt.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-center text-muted-foreground py-8">
+                No hay citas próximas programadas
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </AdminLayout>
   );

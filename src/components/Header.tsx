@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSettings } from '@/hooks/useSettings';
-import { Calendar, Settings } from 'lucide-react';
+import { Calendar, Settings as SettingsIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function Header() {
@@ -11,9 +11,17 @@ export function Header() {
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center shadow-soft">
-              <span className="text-primary-foreground font-display text-lg">✨</span>
-            </div>
+            {settings.logo_url ? (
+              <img 
+                src={settings.logo_url} 
+                alt={settings.business_name}
+                className="w-10 h-10 rounded-full object-cover shadow-soft"
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center shadow-soft">
+                <span className="text-primary-foreground font-display text-lg">✨</span>
+              </div>
+            )}
             <h1 className="font-display text-xl font-semibold text-foreground">
               {settings.business_name}
             </h1>
@@ -28,7 +36,7 @@ export function Header() {
             </Link>
             <Link to="/admin">
               <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <Settings className="w-5 h-5" />
+                <SettingsIcon className="w-5 h-5" />
               </Button>
             </Link>
           </nav>

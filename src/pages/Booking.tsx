@@ -64,12 +64,43 @@ export default function BookingPage() {
     const dateStr = format(booking.date, 'yyyy-MM-dd');
     const now = new Date();
 
+    // Helper to convert time string to minutes from midnight
+    const timeToMinutes = (time: string) => {
+      const [h, m] = time.split(':').map(Number);
+      return h * 60 + m;
+    };
+
+    // Get all booked time ranges for the date (considering duration)
+    const bookedRanges = appointments
+      .filter(a => a.date === dateStr && a.status !== 'cancelled')
+      .map(a => {
+        const startMinutes = timeToMinutes(a.time);
+        const duration = a.service?.duration || 60; // Default 60 min if no service info
+        return {
+          start: startMinutes,
+          end: startMinutes + duration
+        };
+      });
+
+    // Check if a time slot conflicts with any booking
+    const isSlotConflicting = (slotMinutes: number, serviceDuration: number) => {
+      const slotEnd = slotMinutes + serviceDuration;
+      return bookedRanges.some(range => {
+        // Check if slot overlaps with existing booking
+        return (slotMinutes < range.end && slotEnd > range.start);
+      });
+    };
+
+    // Get duration of selected service
+    const serviceDuration = selectedService?.duration || 30;
+
     for (let h = openHour; h < closeHour; h++) {
       for (let m = 0; m < 60; m += 30) {
         if (h === openHour && m < openMin) continue;
         if (h === closeHour - 1 && m > closeMin) continue;
 
         const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        const slotMinutes = h * 60 + m;
 
         // Check if time is in the past for today
         if (isToday(booking.date)) {
@@ -81,11 +112,12 @@ export default function BookingPage() {
         // Check if blocked
         if (isTimeBlocked(dateStr, timeStr)) continue;
 
-        // Check if already booked
-        const isBooked = appointments.some(
-          a => a.date === dateStr && a.time === timeStr && a.status !== 'cancelled'
-        );
-        if (isBooked) continue;
+        // Check if slot conflicts with existing bookings (considering duration)
+        if (isSlotConflicting(slotMinutes, serviceDuration)) continue;
+
+        // Check if service fits before closing time
+        const closeMinutes = closeHour * 60 + closeMin;
+        if (slotMinutes + serviceDuration > closeMinutes) continue;
 
         slots.push(timeStr);
       }

@@ -25,6 +25,7 @@ export default function AdminSettings() {
   
   const [form, setForm] = useState({
     business_name: settings.business_name,
+    logo_url: settings.logo_url || '',
     cover_image_url: settings.cover_image_url || '',
     whatsapp_number: settings.whatsapp_number,
     reservation_amount: settings.reservation_amount.toString(),
@@ -57,6 +58,7 @@ export default function AdminSettings() {
     if (!loading) {
       setForm({
         business_name: settings.business_name,
+        logo_url: settings.logo_url || '',
         cover_image_url: settings.cover_image_url || '',
         whatsapp_number: settings.whatsapp_number,
         reservation_amount: settings.reservation_amount.toString(),
@@ -82,6 +84,7 @@ export default function AdminSettings() {
     
     const result = await updateSettings({
       business_name: form.business_name,
+      logo_url: form.logo_url || null,
       cover_image_url: form.cover_image_url || null,
       whatsapp_number: form.whatsapp_number,
       reservation_amount: parseFloat(form.reservation_amount),
@@ -156,13 +159,29 @@ export default function AdminSettings() {
             </div>
 
             <div className="space-y-2">
-              <Label>Imagen de portada</Label>
+              <Label>Logo del negocio</Label>
+              <ImageUpload
+                currentImage={form.logo_url}
+                onImageUploaded={(url) => setForm({ ...form, logo_url: url })}
+                onImageRemoved={() => setForm({ ...form, logo_url: '' })}
+                aspectRatio="1/1"
+              />
+              <p className="text-xs text-muted-foreground">
+                Imagen cuadrada recomendada (ej: 200x200px)
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Imagen de portada (fondo del inicio)</Label>
               <ImageUpload
                 currentImage={form.cover_image_url}
                 onImageUploaded={(url) => setForm({ ...form, cover_image_url: url })}
                 onImageRemoved={() => setForm({ ...form, cover_image_url: '' })}
                 aspectRatio="21/9"
               />
+              <p className="text-xs text-muted-foreground">
+                Esta imagen aparecerá de fondo en la sección principal
+              </p>
             </div>
           </CardContent>
         </Card>

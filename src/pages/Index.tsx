@@ -48,8 +48,20 @@ const Index = () => {
   return (
     <PublicLayout>
       {/* Hero Section */}
-      <section className="relative min-h-[80vh] hero-gradient flex items-center overflow-hidden">
-        <div className="absolute inset-0 overflow-hidden">
+      <section className="relative min-h-[80vh] flex items-center overflow-hidden">
+        {/* Background Image */}
+        {settings.cover_image_url ? (
+          <div 
+            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+            style={{ backgroundImage: `url(${settings.cover_image_url})` }}
+          >
+            <div className="absolute inset-0 bg-background/70 backdrop-blur-[2px]" />
+          </div>
+        ) : (
+          <div className="absolute inset-0 hero-gradient" />
+        )}
+        
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-float" />
           <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
         </div>

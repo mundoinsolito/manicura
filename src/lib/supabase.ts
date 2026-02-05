@@ -67,6 +67,7 @@ export type Transaction = {
 export type Settings = {
   id: string;
   business_name: string;
+  logo_url: string | null;
   cover_image_url: string | null;
   whatsapp_number: string;
   reservation_amount: number;
