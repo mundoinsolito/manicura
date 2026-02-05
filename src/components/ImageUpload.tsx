@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { uploadToImgBB } from '@/lib/imgbb';
@@ -21,6 +21,11 @@ export function ImageUpload({
   const [preview, setPreview] = useState<string | null>(currentImage || null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Sync preview with currentImage prop
+  useEffect(() => {
+    setPreview(currentImage || null);
+  }, [currentImage]);
+
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -30,19 +35,13 @@ export function ImageUpload({
       return;
     }
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('La imagen debe ser menor a 5MB');
+    // Reduce max size to 2MB for faster uploads
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('La imagen debe ser menor a 2MB');
       return;
     }
 
     setUploading(true);
-    
-    // Show preview immediately
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
 
     try {
       const url = await uploadToImgBB(file);
@@ -55,6 +54,10 @@ export function ImageUpload({
       setPreview(currentImage || null);
     } finally {
       setUploading(false);
+      // Clear the input
+      if (inputRef.current) {
+        inputRef.current.value = '';
+      }
     }
   };
 

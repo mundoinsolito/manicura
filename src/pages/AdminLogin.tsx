@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,33 +11,46 @@ import { Link } from 'react-router-dom';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login, isAdmin } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already logged in
-  if (isAdmin) {
-    navigate('/admin/dashboard');
-    return null;
-  }
+  // Redirect if already logged in - use useEffect to avoid render issues
+  useEffect(() => {
+    if (isAdmin) {
+      navigate('/admin/dashboard', { replace: true });
+    }
+  }, [isAdmin, navigate]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate loading
-    setTimeout(() => {
+    try {
+      // Small delay for UX
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       const success = login(email, password);
       if (success) {
         toast.success('¡Bienvenida!');
-        navigate('/admin/dashboard');
+        navigate('/admin/dashboard', { replace: true });
       } else {
         toast.error('Credenciales incorrectas');
       }
+    } catch (error) {
+      console.error('Login error:', error);
+      toast.error('Error al iniciar sesión');
+    } finally {
       setLoading(false);
-    }, 500);
+    }
   };
+
+  // Don't render if already admin (prevents flash)
+  if (isAdmin) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen hero-gradient flex items-center justify-center p-4">
