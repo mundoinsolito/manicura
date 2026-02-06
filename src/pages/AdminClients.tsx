@@ -2,25 +2,24 @@ import { useState } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { useClients } from '@/hooks/useClients';
 import { useAppointments } from '@/hooks/useAppointments';
+import { ClientDetailDialog } from '@/components/ClientDetailDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, Search, Phone, AlertTriangle, Heart, User } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, AlertTriangle, Heart } from 'lucide-react';
 import { toast } from 'sonner';
 import { Client } from '@/lib/supabase';
-import { format, parseISO } from 'date-fns';
-import { es } from 'date-fns/locale';
 
 export default function AdminClients() {
   const { clients, loading, addClient, updateClient, deleteClient } = useClients();
   const { appointments } = useAppointments();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [detailDialog, setDetailDialog] = useState<Client | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -114,10 +113,8 @@ export default function AdminClients() {
     }
   };
 
-  const getClientAppointments = (clientId: string) => {
-    return appointments.filter(a => a.client_id === clientId).sort((a, b) => 
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    );
+  const getClientAppointmentCount = (clientId: string) => {
+    return appointments.filter(a => a.client_id === clientId).length;
   };
 
   const filteredClients = clients.filter(c => 
@@ -269,83 +266,12 @@ export default function AdminClients() {
         </div>
 
         {/* Client Detail Dialog */}
-        <Dialog open={!!detailDialog} onOpenChange={(open) => !open && setDetailDialog(null)}>
-          <DialogContent className="max-w-lg">
-            {detailDialog && (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-full accent-gradient flex items-center justify-center text-primary-foreground font-semibold">
-                      {detailDialog.name.charAt(0)}
-                    </div>
-                    {detailDialog.name}
-                  </DialogTitle>
-                </DialogHeader>
-                
-                <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground">Teléfono</p>
-                      <p className="font-medium">{detailDialog.phone}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground">Cédula</p>
-                      <p className="font-medium">{detailDialog.cedula}</p>
-                    </div>
-                  </div>
-
-                  {detailDialog.health_alerts && (
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
-                      <h4 className="font-medium text-amber-800 flex items-center gap-2 mb-1">
-                        <AlertTriangle className="w-4 h-4" />
-                        Alertas de Salud
-                      </h4>
-                      <p className="text-sm text-amber-700">{detailDialog.health_alerts}</p>
-                    </div>
-                  )}
-
-                  {(detailDialog.favorite_colors || detailDialog.nail_shape || detailDialog.preferences) && (
-                    <div className="p-3 rounded-lg bg-rose-50 border border-rose-200">
-                      <h4 className="font-medium text-rose-800 flex items-center gap-2 mb-2">
-                        <Heart className="w-4 h-4" />
-                        Preferencias
-                      </h4>
-                      {detailDialog.favorite_colors && (
-                        <p className="text-sm text-rose-700">
-                          <span className="font-medium">Colores:</span> {detailDialog.favorite_colors}
-                        </p>
-                      )}
-                      {detailDialog.nail_shape && (
-                        <p className="text-sm text-rose-700">
-                          <span className="font-medium">Forma:</span> {detailDialog.nail_shape}
-                        </p>
-                      )}
-                      {detailDialog.preferences && (
-                        <p className="text-sm text-rose-700 mt-1">{detailDialog.preferences}</p>
-                      )}
-                    </div>
-                  )}
-
-                  <div>
-                    <h4 className="font-medium mb-2">Historial de Citas</h4>
-                    <div className="space-y-2 max-h-48 overflow-y-auto">
-                      {getClientAppointments(detailDialog.id).slice(0, 10).map((apt) => (
-                        <div key={apt.id} className="flex items-center justify-between text-sm p-2 bg-muted rounded">
-                          <span>{format(parseISO(apt.date), 'dd/MM/yyyy', { locale: es })}</span>
-                          <span>{apt.service?.name}</span>
-                          <Badge variant="outline">{apt.status}</Badge>
-                        </div>
-                      ))}
-                      {getClientAppointments(detailDialog.id).length === 0 && (
-                        <p className="text-muted-foreground text-sm">Sin citas registradas</p>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </>
-            )}
-          </DialogContent>
-        </Dialog>
+        <ClientDetailDialog
+          client={selectedClient}
+          open={!!selectedClient}
+          onOpenChange={(open) => !open && setSelectedClient(null)}
+          appointments={appointments}
+        />
 
         {/* Clients Table */}
         <Card>
@@ -369,7 +295,7 @@ export default function AdminClients() {
                     <TableRow 
                       key={client.id} 
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => setDetailDialog(client)}
+                      onClick={() => setSelectedClient(client)}
                     >
                       <TableCell>
                         <div className="flex items-center gap-3">
@@ -390,7 +316,7 @@ export default function AdminClients() {
                         )}
                       </TableCell>
                       <TableCell>
-                        {getClientAppointments(client.id).length}
+                        {getClientAppointmentCount(client.id)}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
