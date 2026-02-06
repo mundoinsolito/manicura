@@ -6,18 +6,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Store, Clock, DollarSign, Palette, Phone, Save, Loader2, Sparkles, X, Plus } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Store, Clock, DollarSign, Palette, Phone, Save, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import { FeatureTag } from '@/lib/supabase';
 
-interface FeatureTag {
-  id: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}
+const defaultFeatureTags: FeatureTag[] = [
+  { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
+  { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
+  { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
+];
 
 export default function AdminSettings() {
   const { settings, loading, updateSettings } = useSettings();
@@ -31,27 +31,14 @@ export default function AdminSettings() {
     reservation_amount: settings.reservation_amount.toString(),
     opening_time: settings.opening_time,
     closing_time: settings.closing_time,
+    time_slot_interval: (settings.time_slot_interval || 30).toString(),
     primary_color: settings.primary_color,
     accent_color: settings.accent_color,
   });
 
-  const [featureTags, setFeatureTags] = useState<FeatureTag[]>([
-    { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
-    { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
-    { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
-  ]);
-
-  // Load saved feature tags from localStorage
-  useEffect(() => {
-    const savedTags = localStorage.getItem('featureTags');
-    if (savedTags) {
-      try {
-        setFeatureTags(JSON.parse(savedTags));
-      } catch (e) {
-        console.error('Error parsing feature tags:', e);
-      }
-    }
-  }, []);
+  const [featureTags, setFeatureTags] = useState<FeatureTag[]>(
+    settings.feature_tags || defaultFeatureTags
+  );
 
   // Update form when settings load
   useEffect(() => {
@@ -64,9 +51,11 @@ export default function AdminSettings() {
         reservation_amount: settings.reservation_amount.toString(),
         opening_time: settings.opening_time,
         closing_time: settings.closing_time,
+        time_slot_interval: (settings.time_slot_interval || 30).toString(),
         primary_color: settings.primary_color,
         accent_color: settings.accent_color,
       });
+      setFeatureTags(settings.feature_tags || defaultFeatureTags);
     }
   }, [loading, settings]);
 
@@ -79,9 +68,6 @@ export default function AdminSettings() {
   const handleSave = async () => {
     setSaving(true);
     
-    // Save feature tags to localStorage
-    localStorage.setItem('featureTags', JSON.stringify(featureTags));
-    
     const result = await updateSettings({
       business_name: form.business_name,
       logo_url: form.logo_url || null,
@@ -90,8 +76,10 @@ export default function AdminSettings() {
       reservation_amount: parseFloat(form.reservation_amount),
       opening_time: form.opening_time,
       closing_time: form.closing_time,
+      time_slot_interval: parseInt(form.time_slot_interval),
       primary_color: form.primary_color,
       accent_color: form.accent_color,
+      feature_tags: featureTags,
     });
 
     if (result.success) {
@@ -221,10 +209,10 @@ export default function AdminSettings() {
               Horario de Atención
             </CardTitle>
             <CardDescription>
-              Define tu horario de trabajo
+              Define tu horario de trabajo y los intervalos de citas
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Hora de apertura</Label>
@@ -242,6 +230,26 @@ export default function AdminSettings() {
                   onChange={(e) => setForm({ ...form, closing_time: e.target.value })}
                 />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Intervalo de horarios</Label>
+              <Select
+                value={form.time_slot_interval}
+                onValueChange={(v) => setForm({ ...form, time_slot_interval: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleccionar intervalo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="15">Cada 15 minutos</SelectItem>
+                  <SelectItem value="30">Cada 30 minutos</SelectItem>
+                  <SelectItem value="45">Cada 45 minutos</SelectItem>
+                  <SelectItem value="60">Cada 1 hora</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Define cada cuánto tiempo se mostrarán las opciones de horario para reservar
+              </p>
             </div>
           </CardContent>
         </Card>

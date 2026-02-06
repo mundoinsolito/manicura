@@ -3,6 +3,9 @@ import { AdminLayout } from '@/components/AdminLayout';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useBlockedTimes } from '@/hooks/useBlockedTimes';
 import { useSettings } from '@/hooks/useSettings';
+import { useClients } from '@/hooks/useClients';
+import { useServices } from '@/hooks/useServices';
+import { ClientDetailDialog } from '@/components/ClientDetailDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,26 +14,42 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, isFuture, parseISO as parseDate } from 'date-fns';
+import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, isFuture, isBefore, startOfToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Check, X, Trash2, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, User, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
+import { Client } from '@/lib/supabase';
 
 export default function AdminAgenda() {
-  const { appointments, updateAppointment, deleteAppointment } = useAppointments();
-  const { blockedTimes, addBlockedTime, deleteBlockedTime } = useBlockedTimes();
+  const { appointments, updateAppointment, deleteAppointment, addAppointment } = useAppointments();
+  const { blockedTimes, addBlockedTime, deleteBlockedTime, isTimeBlocked } = useBlockedTimes();
   const { settings } = useSettings();
+  const { clients, addClient, findClientByPhone } = useClients();
+  const { services } = useServices();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
+  const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [selectedClientForDetail, setSelectedClientForDetail] = useState<Client | null>(null);
   const [blockForm, setBlockForm] = useState({
     date: new Date(),
     start_time: settings.opening_time,
     end_time: settings.closing_time,
     reason: '',
   });
+
+  // New appointment form
+  const [appointmentForm, setAppointmentForm] = useState({
+    cedula: '',
+    name: '',
+    phone: '',
+    service_id: '',
+    date: new Date(),
+    time: '',
+  });
+  const [existingClient, setExistingClient] = useState<Client | null>(null);
+  const [isNewClient, setIsNewClient] = useState(false);
 
   // Get pending appointments
   const pendingAppointments = appointments.filter(a => a.status === 'pending');
@@ -42,6 +61,8 @@ export default function AdminAgenda() {
     if (dateCompare !== 0) return dateCompare;
     return a.time.localeCompare(b.time);
   });
+
+  const activeServices = services.filter(s => s.is_active);
 
   const monthDays = eachDayOfInterval({
     start: startOfMonth(currentMonth),
@@ -101,14 +122,150 @@ export default function AdminAgenda() {
     }
   };
 
-  const statusColors = {
+  // Search client by cedula
+  const handleCedulaSearch = () => {
+    const client = clients.find(c => c.cedula === appointmentForm.cedula.trim());
+    if (client) {
+      setExistingClient(client);
+      setIsNewClient(false);
+      setAppointmentForm(f => ({ ...f, name: client.name, phone: client.phone }));
+    } else {
+      setExistingClient(null);
+      setIsNewClient(true);
+      setAppointmentForm(f => ({ ...f, name: '', phone: '' }));
+    }
+  };
+
+  // Get available time slots
+  const getAvailableTimeSlots = () => {
+    if (!appointmentForm.date) return [];
+
+    const slots: string[] = [];
+    const [openHour, openMin] = settings.opening_time.split(':').map(Number);
+    const [closeHour, closeMin] = settings.closing_time.split(':').map(Number);
+    const dateStr = format(appointmentForm.date, 'yyyy-MM-dd');
+    const interval = settings.time_slot_interval || 30;
+
+    const selectedService = services.find(s => s.id === appointmentForm.service_id);
+    const serviceDuration = selectedService?.duration || 30;
+
+    // Get booked time ranges
+    const bookedRanges = appointments
+      .filter(a => a.date === dateStr && a.status !== 'cancelled')
+      .map(a => {
+        const [h, m] = a.time.split(':').map(Number);
+        const startMinutes = h * 60 + m;
+        const duration = a.service?.duration || 60;
+        return { start: startMinutes, end: startMinutes + duration };
+      });
+
+    const isSlotConflicting = (slotMinutes: number) => {
+      const slotEnd = slotMinutes + serviceDuration;
+      return bookedRanges.some(range => slotMinutes < range.end && slotEnd > range.start);
+    };
+
+    for (let h = openHour; h <= closeHour; h++) {
+      for (let m = 0; m < 60; m += interval) {
+        if (h === openHour && m < openMin) continue;
+        if (h === closeHour && m > closeMin) continue;
+
+        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+        const slotMinutes = h * 60 + m;
+
+        if (isTimeBlocked(dateStr, timeStr)) continue;
+        if (isSlotConflicting(slotMinutes)) continue;
+
+        const closeMinutes = closeHour * 60 + closeMin;
+        if (slotMinutes + serviceDuration > closeMinutes) continue;
+
+        slots.push(timeStr);
+      }
+    }
+
+    return slots;
+  };
+
+  const handleCreateAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (!appointmentForm.service_id || !appointmentForm.time) {
+      toast.error('Completa todos los campos');
+      return;
+    }
+
+    let clientId = existingClient?.id;
+
+    // Create new client if needed
+    if (isNewClient && !existingClient) {
+      if (!appointmentForm.name || !appointmentForm.phone || !appointmentForm.cedula) {
+        toast.error('Completa los datos del cliente');
+        return;
+      }
+
+      const result = await addClient({
+        name: appointmentForm.name,
+        phone: appointmentForm.phone,
+        cedula: appointmentForm.cedula,
+        email: null,
+        health_alerts: null,
+        preferences: null,
+        favorite_colors: null,
+        nail_shape: null,
+        notes: null,
+      });
+
+      if (result.success && result.data) {
+        clientId = result.data.id;
+      } else {
+        toast.error('Error al crear cliente');
+        return;
+      }
+    }
+
+    if (!clientId) {
+      toast.error('Busca un cliente por cédula');
+      return;
+    }
+
+    const selectedService = services.find(s => s.id === appointmentForm.service_id);
+
+    const result = await addAppointment({
+      client_id: clientId,
+      service_id: appointmentForm.service_id,
+      date: format(appointmentForm.date, 'yyyy-MM-dd'),
+      time: appointmentForm.time,
+      status: 'confirmed',
+      payment_status: 'pending',
+      payment_amount: selectedService?.price || 0,
+      notes: 'Cita creada por administrador',
+    });
+
+    if (result.success) {
+      toast.success('Cita creada');
+      setAppointmentDialogOpen(false);
+      setAppointmentForm({
+        cedula: '',
+        name: '',
+        phone: '',
+        service_id: '',
+        date: new Date(),
+        time: '',
+      });
+      setExistingClient(null);
+      setIsNewClient(false);
+    } else {
+      toast.error('Error al crear cita');
+    }
+  };
+
+  const statusColors: Record<string, string> = {
     pending: 'bg-amber-100 text-amber-800 border-amber-200',
     confirmed: 'bg-green-100 text-green-800 border-green-200',
     completed: 'bg-blue-100 text-blue-800 border-blue-200',
     cancelled: 'bg-red-100 text-red-800 border-red-200',
   };
 
-  const statusLabels = {
+  const statusLabels: Record<string, string> = {
     pending: 'Pendiente',
     confirmed: 'Confirmada',
     completed: 'Completada',
@@ -118,69 +275,191 @@ export default function AdminAgenda() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
             <h1 className="font-display text-3xl font-bold text-foreground">Agenda</h1>
             <p className="text-muted-foreground">Gestiona tus citas y horarios</p>
           </div>
           
-          <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline">
-                <Ban className="w-4 h-4 mr-2" />
-                Bloquear Horario
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Bloquear Horario</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleBlockSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Fecha</Label>
-                  <Calendar
-                    mode="single"
-                    selected={blockForm.date}
-                    onSelect={(date) => date && setBlockForm({ ...blockForm, date })}
-                    locale={es}
-                    className="rounded-lg border pointer-events-auto"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Hora inicio</Label>
-                    <Input
-                      type="time"
-                      value={blockForm.start_time}
-                      onChange={(e) => setBlockForm({ ...blockForm, start_time: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Hora fin</Label>
-                    <Input
-                      type="time"
-                      value={blockForm.end_time}
-                      onChange={(e) => setBlockForm({ ...blockForm, end_time: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Razón (opcional)</Label>
-                  <Input
-                    value={blockForm.reason}
-                    onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                    placeholder="Ej: Descanso, Capacitación..."
-                  />
-                </div>
-
-                <Button type="submit" className="w-full accent-gradient border-0">
-                  Bloquear
+          <div className="flex gap-2">
+            <Dialog open={appointmentDialogOpen} onOpenChange={setAppointmentDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="accent-gradient border-0">
+                  <Plus className="w-4 h-4 mr-2" />
+                  Nueva Cita
                 </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Agendar Nueva Cita</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleCreateAppointment} className="space-y-4">
+                  {/* Cedula Search */}
+                  <div className="space-y-2">
+                    <Label>Buscar cliente por cédula</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                          placeholder="V-12345678"
+                          value={appointmentForm.cedula}
+                          onChange={(e) => setAppointmentForm({ ...appointmentForm, cedula: e.target.value })}
+                          className="pl-10"
+                        />
+                      </div>
+                      <Button type="button" variant="outline" onClick={handleCedulaSearch}>
+                        Buscar
+                      </Button>
+                    </div>
+                  </div>
+
+                  {existingClient && (
+                    <div className="p-3 rounded-lg bg-green-50 border border-green-200">
+                      <p className="text-sm text-green-800">
+                        <span className="font-medium">Cliente encontrado:</span> {existingClient.name}
+                      </p>
+                      <p className="text-xs text-green-600">Tel: {existingClient.phone}</p>
+                    </div>
+                  )}
+
+                  {isNewClient && !existingClient && appointmentForm.cedula && (
+                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
+                      <p className="text-sm text-amber-800 font-medium">Cliente nuevo - Ingresa sus datos:</p>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Nombre completo"
+                          value={appointmentForm.name}
+                          onChange={(e) => setAppointmentForm({ ...appointmentForm, name: e.target.value })}
+                        />
+                        <Input
+                          placeholder="Teléfono"
+                          value={appointmentForm.phone}
+                          onChange={(e) => setAppointmentForm({ ...appointmentForm, phone: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Service */}
+                  <div className="space-y-2">
+                    <Label>Servicio</Label>
+                    <Select
+                      value={appointmentForm.service_id}
+                      onValueChange={(v) => setAppointmentForm({ ...appointmentForm, service_id: v, time: '' })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Seleccionar servicio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeServices.map((s) => (
+                          <SelectItem key={s.id} value={s.id}>
+                            {s.name} - ${s.price} ({s.duration} min)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Date */}
+                  <div className="space-y-2">
+                    <Label>Fecha</Label>
+                    <Calendar
+                      mode="single"
+                      selected={appointmentForm.date}
+                      onSelect={(date) => date && setAppointmentForm({ ...appointmentForm, date, time: '' })}
+                      disabled={(date) => isBefore(date, startOfToday())}
+                      locale={es}
+                      className="rounded-lg border pointer-events-auto"
+                    />
+                  </div>
+
+                  {/* Time */}
+                  <div className="space-y-2">
+                    <Label>Hora</Label>
+                    {appointmentForm.service_id ? (
+                      <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                        {getAvailableTimeSlots().map((time) => (
+                          <Button
+                            key={time}
+                            type="button"
+                            variant={appointmentForm.time === time ? 'default' : 'outline'}
+                            size="sm"
+                            onClick={() => setAppointmentForm({ ...appointmentForm, time })}
+                          >
+                            {time}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Selecciona un servicio primero</p>
+                    )}
+                  </div>
+
+                  <Button type="submit" className="w-full accent-gradient border-0">
+                    Agendar Cita
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Ban className="w-4 h-4 mr-2" />
+                  Bloquear Horario
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Bloquear Horario</DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleBlockSubmit} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>Fecha</Label>
+                    <Calendar
+                      mode="single"
+                      selected={blockForm.date}
+                      onSelect={(date) => date && setBlockForm({ ...blockForm, date })}
+                      locale={es}
+                      className="rounded-lg border pointer-events-auto"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Hora inicio</Label>
+                      <Input
+                        type="time"
+                        value={blockForm.start_time}
+                        onChange={(e) => setBlockForm({ ...blockForm, start_time: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Hora fin</Label>
+                      <Input
+                        type="time"
+                        value={blockForm.end_time}
+                        onChange={(e) => setBlockForm({ ...blockForm, end_time: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Razón (opcional)</Label>
+                    <Input
+                      value={blockForm.reason}
+                      onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
+                      placeholder="Ej: Descanso, Capacitación..."
+                    />
+                  </div>
+
+                  <Button type="submit" className="w-full accent-gradient border-0">
+                    Bloquear
+                  </Button>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -244,7 +523,7 @@ export default function AdminAgenda() {
                         </div>
                       )}
                       {dayBlocked.length > 0 && (
-                        <div className="text-xs bg-red-100 text-red-700 px-1 rounded">
+                        <div className="text-xs bg-destructive/10 text-destructive px-1 rounded">
                           Bloqueado
                         </div>
                       )}
@@ -272,24 +551,24 @@ export default function AdminAgenda() {
                   {selectedDateBlocked.map((block) => (
                     <div 
                       key={block.id}
-                      className="p-3 rounded-lg bg-red-50 border border-red-200 flex items-center justify-between"
+                      className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-between"
                     >
                       <div>
-                        <div className="flex items-center gap-2 text-red-700 font-medium">
+                        <div className="flex items-center gap-2 text-destructive font-medium">
                           <Ban className="w-4 h-4" />
                           Bloqueado
                         </div>
-                        <p className="text-sm text-red-600">
+                        <p className="text-sm text-destructive/80">
                           {block.start_time} - {block.end_time}
                         </p>
                         {block.reason && (
-                          <p className="text-xs text-red-500">{block.reason}</p>
+                          <p className="text-xs text-destructive/60">{block.reason}</p>
                         )}
                       </div>
                       <Button 
                         variant="ghost" 
                         size="icon"
-                        className="text-red-600"
+                        className="text-destructive"
                         onClick={() => handleDeleteBlock(block.id)}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -314,9 +593,18 @@ export default function AdminAgenda() {
                       </div>
                       
                       <div className="mb-2">
-                        <p className="font-medium">{apt.client?.name || 'Cliente'}</p>
+                        <button 
+                          className="font-medium text-primary hover:underline text-left"
+                          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
+                        >
+                          {apt.client?.name || 'Cliente'}
+                        </button>
                         <p className="text-sm text-muted-foreground">{apt.service?.name}</p>
                         <p className="text-sm text-muted-foreground">{apt.client?.phone}</p>
+                        <p className="text-sm text-muted-foreground font-medium">
+                          <CreditCard className="w-3 h-3 inline mr-1" />
+                          {apt.client?.cedula}
+                        </p>
                       </div>
 
                       <div className="flex gap-2">
@@ -375,18 +663,23 @@ export default function AdminAgenda() {
                 {pendingAppointments.map((apt) => (
                   <div 
                     key={apt.id}
-                    className="p-4 rounded-lg border border-amber-200 bg-white flex flex-col sm:flex-row sm:items-center gap-4"
+                    className="p-4 rounded-lg border border-amber-200 bg-background flex flex-col sm:flex-row sm:items-center gap-4"
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-foreground">{apt.client?.name || 'Cliente'}</span>
+                        <button 
+                          className="font-semibold text-foreground hover:text-primary hover:underline"
+                          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
+                        >
+                          {apt.client?.name || 'Cliente'}
+                        </button>
                         <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pendiente</Badge>
                       </div>
                       <p className="text-sm text-muted-foreground">
                         {apt.service?.name} • {format(parseISO(apt.date), "d 'de' MMMM", { locale: es })} a las {apt.time}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Tel: {apt.client?.phone} • Monto: ${apt.payment_amount}
+                        Tel: {apt.client?.phone} • <span className="font-medium">Cédula: {apt.client?.cedula}</span> • Monto: ${apt.payment_amount}
                       </p>
                     </div>
                     <div className="flex gap-2">
@@ -432,7 +725,12 @@ export default function AdminAgenda() {
                   >
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-foreground">{apt.client?.name || 'Cliente'}</span>
+                        <button 
+                          className="font-semibold text-foreground hover:text-primary hover:underline"
+                          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
+                        >
+                          {apt.client?.name || 'Cliente'}
+                        </button>
                         <Badge className={statusColors[apt.status]}>
                           {statusLabels[apt.status]}
                         </Badge>
@@ -444,7 +742,7 @@ export default function AdminAgenda() {
                         {format(parseISO(apt.date), "EEEE d 'de' MMMM", { locale: es })} a las {apt.time}
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Tel: {apt.client?.phone}
+                        Tel: {apt.client?.phone} • <span className="font-medium">Cédula: {apt.client?.cedula}</span>
                       </p>
                     </div>
                     <div className="flex gap-2 items-center">
@@ -481,6 +779,14 @@ export default function AdminAgenda() {
             )}
           </CardContent>
         </Card>
+
+        {/* Client Detail Dialog */}
+        <ClientDetailDialog 
+          client={selectedClientForDetail}
+          open={!!selectedClientForDetail}
+          onOpenChange={(open) => !open && setSelectedClientForDetail(null)}
+          appointments={appointments}
+        />
       </div>
     </AdminLayout>
   );

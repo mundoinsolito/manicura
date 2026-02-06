@@ -64,6 +64,13 @@ export type Transaction = {
   created_at: string;
 };
 
+export type FeatureTag = {
+  id: string;
+  title: string;
+  description: string;
+  enabled: boolean;
+};
+
 export type Settings = {
   id: string;
   business_name: string;
@@ -73,8 +80,10 @@ export type Settings = {
   reservation_amount: number;
   opening_time: string;
   closing_time: string;
+  time_slot_interval: number; // in minutes (30, 60, etc.)
   primary_color: string;
   accent_color: string;
+  feature_tags: FeatureTag[] | null;
   created_at: string;
   updated_at: string;
 };

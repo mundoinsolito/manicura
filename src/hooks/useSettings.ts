@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
 import { supabase, Settings } from '@/lib/supabase';
 
+const defaultFeatureTags = [
+  { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
+  { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
+  { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
+];
+
 const defaultSettings: Settings = {
   id: '1',
   business_name: 'Manicura Elegante',
@@ -10,8 +16,10 @@ const defaultSettings: Settings = {
   reservation_amount: 10,
   opening_time: '09:00',
   closing_time: '18:00',
+  time_slot_interval: 30,
   primary_color: '#d4768f',
   accent_color: '#d4a574',
+  feature_tags: defaultFeatureTags,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };

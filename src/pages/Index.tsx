@@ -1,26 +1,13 @@
-import { useState, useEffect } from 'react';
 import { PublicLayout } from '@/components/PublicLayout';
 import { useServices } from '@/hooks/useServices';
 import { useSettings } from '@/hooks/useSettings';
 import { usePromotions } from '@/hooks/usePromotions';
 import { ServiceCard } from '@/components/ServiceCard';
 import { PromotionCard } from '@/components/PromotionCard';
+import { BookingStatusChecker } from '@/components/BookingStatusChecker';
 import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 import { Calendar, Sparkles, Heart, Star } from 'lucide-react';
-
-interface FeatureTag {
-  id: string;
-  title: string;
-  description: string;
-  enabled: boolean;
-}
-
-const defaultFeatureTags: FeatureTag[] = [
-  { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
-  { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
-  { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
-];
 
 const featureIcons = [Star, Heart, Calendar];
 
@@ -29,20 +16,8 @@ const Index = () => {
   const { settings } = useSettings();
   const { activePromotions } = usePromotions();
 
-  const [featureTags, setFeatureTags] = useState<FeatureTag[]>(defaultFeatureTags);
-
-  useEffect(() => {
-    const savedTags = localStorage.getItem('featureTags');
-    if (savedTags) {
-      try {
-        setFeatureTags(JSON.parse(savedTags));
-      } catch (e) {
-        console.error('Error parsing feature tags:', e);
-      }
-    }
-  }, []);
-
   const activeServices = services.filter(s => s.is_active);
+  const featureTags = settings.feature_tags || [];
   const enabledFeatureTags = featureTags.filter(tag => tag.enabled);
 
   return (
@@ -89,9 +64,13 @@ const Index = () => {
                   Reservar Cita
                 </Button>
               </Link>
+              <BookingStatusChecker />
+            </div>
+
+            <div className="mt-4 animate-fade-up" style={{ animationDelay: '0.4s' }}>
               <Link to="/servicios">
-                <Button variant="outline" size="lg" className="px-8 text-lg">
-                  Ver Servicios
+                <Button variant="link" className="text-muted-foreground hover:text-primary">
+                  Ver todos los servicios →
                 </Button>
               </Link>
             </div>

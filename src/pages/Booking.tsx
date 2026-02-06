@@ -94,8 +94,10 @@ export default function BookingPage() {
     // Get duration of selected service
     const serviceDuration = selectedService?.duration || 30;
 
-    for (let h = openHour; h < closeHour; h++) {
-      for (let m = 0; m < 60; m += 30) {
+    const interval = settings.time_slot_interval || 30;
+
+    for (let h = openHour; h <= closeHour; h++) {
+      for (let m = 0; m < 60; m += interval) {
         if (h === openHour && m < openMin) continue;
         if (h === closeHour - 1 && m > closeMin) continue;
 
@@ -227,12 +229,17 @@ export default function BookingPage() {
         throw new Error('Error al crear la cita');
       }
       
-      // Open WhatsApp
+    // Open WhatsApp
     const phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
     const message = getWhatsAppMessage();
     window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
       
       toast.success('¡Cita registrada! Envía tu comprobante para confirmar.');
+      
+      // Redirect to home after a short delay
+      setTimeout(() => {
+        navigate('/');
+      }, 1000);
     } catch (error) {
       console.error('Error creating appointment:', error);
       toast.error('Error al registrar la cita');
