@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Store, Clock, DollarSign, Palette, Phone, Save, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,6 +19,20 @@ const defaultFeatureTags: FeatureTag[] = [
   { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
   { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
 ];
+
+function generateAllSlots(openTime: string, closeTime: string): string[] {
+  const [openH, openM] = openTime.split(':').map(Number);
+  const [closeH, closeM] = closeTime.split(':').map(Number);
+  const slots: string[] = [];
+  for (let h = openH; h <= closeH; h++) {
+    for (let m = 0; m < 60; m += 30) {
+      if (h === openH && m < openM) continue;
+      if (h === closeH && m > closeM) continue;
+      slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+    }
+  }
+  return slots;
+}
 
 export default function AdminSettings() {
   const { settings, loading, updateSettings } = useSettings();
@@ -32,6 +47,8 @@ export default function AdminSettings() {
     opening_time: settings.opening_time,
     closing_time: settings.closing_time,
     time_slot_interval: (settings.time_slot_interval || 30).toString(),
+    schedule_mode: settings.schedule_mode || 'interval',
+    manual_hours: settings.manual_hours || [],
     primary_color: settings.primary_color,
     accent_color: settings.accent_color,
   });
@@ -40,7 +57,6 @@ export default function AdminSettings() {
     settings.feature_tags || defaultFeatureTags
   );
 
-  // Update form when settings load
   useEffect(() => {
     if (!loading) {
       setForm({
@@ -52,12 +68,25 @@ export default function AdminSettings() {
         opening_time: settings.opening_time,
         closing_time: settings.closing_time,
         time_slot_interval: (settings.time_slot_interval || 30).toString(),
+        schedule_mode: settings.schedule_mode || 'interval',
+        manual_hours: settings.manual_hours || [],
         primary_color: settings.primary_color,
         accent_color: settings.accent_color,
       });
       setFeatureTags(settings.feature_tags || defaultFeatureTags);
     }
   }, [loading, settings]);
+
+  const allSlots = generateAllSlots(form.opening_time, form.closing_time);
+
+  const toggleManualHour = (hour: string) => {
+    setForm(f => ({
+      ...f,
+      manual_hours: f.manual_hours.includes(hour)
+        ? f.manual_hours.filter(h => h !== hour)
+        : [...f.manual_hours, hour].sort(),
+    }));
+  };
 
   const updateFeatureTag = (id: string, updates: Partial<FeatureTag>) => {
     setFeatureTags(tags => tags.map(tag => 
@@ -77,6 +106,8 @@ export default function AdminSettings() {
       opening_time: form.opening_time,
       closing_time: form.closing_time,
       time_slot_interval: parseInt(form.time_slot_interval),
+      schedule_mode: form.schedule_mode as 'interval' | 'manual',
+      manual_hours: form.manual_hours,
       primary_color: form.primary_color,
       accent_color: form.accent_color,
       feature_tags: featureTags,
@@ -104,14 +135,14 @@ export default function AdminSettings() {
   return (
     <AdminLayout>
       <div className="space-y-6 max-w-2xl">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Configuración</h1>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Configuración</h1>
             <p className="text-muted-foreground">Personaliza tu negocio</p>
           </div>
           
           <Button 
-            className="accent-gradient border-0"
+            className="accent-gradient border-0 w-full sm:w-auto"
             onClick={handleSave}
             disabled={saving}
           >
@@ -209,7 +240,7 @@ export default function AdminSettings() {
               Horario de Atención
             </CardTitle>
             <CardDescription>
-              Define tu horario de trabajo y los intervalos de citas
+              Define tu horario de trabajo y cómo se generan los horarios disponibles
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -231,25 +262,75 @@ export default function AdminSettings() {
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Intervalo de horarios</Label>
+
+            {/* Schedule Mode */}
+            <div className="space-y-3 p-4 rounded-lg border border-border">
+              <Label className="font-semibold">Modo de horarios</Label>
               <Select
-                value={form.time_slot_interval}
-                onValueChange={(v) => setForm({ ...form, time_slot_interval: v })}
+                value={form.schedule_mode}
+                onValueChange={(v) => setForm({ ...form, schedule_mode: v as 'interval' | 'manual' })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Seleccionar intervalo" />
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="15">Cada 15 minutos</SelectItem>
-                  <SelectItem value="30">Cada 30 minutos</SelectItem>
-                  <SelectItem value="45">Cada 45 minutos</SelectItem>
-                  <SelectItem value="60">Cada 1 hora</SelectItem>
+                  <SelectItem value="interval">Automático por intervalo</SelectItem>
+                  <SelectItem value="manual">Selección manual de horas</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Define cada cuánto tiempo se mostrarán las opciones de horario para reservar
-              </p>
+
+              {form.schedule_mode === 'interval' ? (
+                <div className="space-y-2">
+                  <Label>Intervalo de horarios</Label>
+                  <Select
+                    value={form.time_slot_interval}
+                    onValueChange={(v) => setForm({ ...form, time_slot_interval: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar intervalo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="15">Cada 15 minutos</SelectItem>
+                      <SelectItem value="30">Cada 30 minutos</SelectItem>
+                      <SelectItem value="45">Cada 45 minutos</SelectItem>
+                      <SelectItem value="60">Cada 1 hora</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Define cada cuánto tiempo se mostrarán las opciones de horario
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Selecciona las horas que quieres mostrar</Label>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Solo estas horas aparecerán disponibles para reservar (a menos que un día tenga horario personalizado)
+                  </p>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                    {allSlots.map((slot) => (
+                      <label 
+                        key={slot} 
+                        className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                          form.manual_hours.includes(slot)
+                            ? 'bg-primary/10 border-primary'
+                            : 'border-border hover:bg-muted'
+                        }`}
+                      >
+                        <Checkbox
+                          checked={form.manual_hours.includes(slot)}
+                          onCheckedChange={() => toggleManualHour(slot)}
+                        />
+                        <span className="text-sm font-medium">{slot}</span>
+                      </label>
+                    ))}
+                  </div>
+                  {form.manual_hours.length > 0 && (
+                    <p className="text-xs text-primary font-medium">
+                      {form.manual_hours.length} hora(s) seleccionada(s): {form.manual_hours.join(', ')}
+                    </p>
+                  )}
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>

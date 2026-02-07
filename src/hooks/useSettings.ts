@@ -9,7 +9,7 @@ const defaultFeatureTags = [
 
 const defaultSettings: Settings = {
   id: '1',
-  business_name: 'Manicura Elegante',
+  business_name: 'Nails Clara',
   logo_url: null,
   cover_image_url: null,
   whatsapp_number: '+58412000000',
@@ -17,6 +17,8 @@ const defaultSettings: Settings = {
   opening_time: '09:00',
   closing_time: '18:00',
   time_slot_interval: 30,
+  schedule_mode: 'interval',
+  manual_hours: [],
   primary_color: '#d4768f',
   accent_color: '#d4a574',
   feature_tags: defaultFeatureTags,
@@ -43,7 +45,12 @@ export function useSettings() {
         console.log('Settings not found, using defaults');
         setSettings(defaultSettings);
       } else if (data) {
-        setSettings(data);
+        setSettings({
+          ...defaultSettings,
+          ...data,
+          schedule_mode: data.schedule_mode || 'interval',
+          manual_hours: data.manual_hours || [],
+        });
       }
     } catch (error) {
       console.error('Error fetching settings:', error);
@@ -66,7 +73,12 @@ export function useSettings() {
         .single();
 
       if (error) throw error;
-      if (data) setSettings(data);
+      if (data) setSettings({
+        ...defaultSettings,
+        ...data,
+        schedule_mode: data.schedule_mode || 'interval',
+        manual_hours: data.manual_hours || [],
+      });
       return { success: true };
     } catch (error) {
       console.error('Error updating settings:', error);

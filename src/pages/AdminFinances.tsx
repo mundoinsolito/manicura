@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { useTransactions } from '@/hooks/useTransactions';
+import { useAppointments } from '@/hooks/useAppointments';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -22,8 +23,10 @@ export default function AdminFinances() {
     deleteTransaction, 
     totalIncome, 
     totalExpenses, 
-    netProfit 
+    netProfit,
+    refetch 
   } = useTransactions();
+  const { appointments } = useAppointments();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState({
@@ -32,6 +35,11 @@ export default function AdminFinances() {
     description: '',
     date: format(new Date(), 'yyyy-MM-dd'),
   });
+
+  // Calculate appointment-based income (paid appointments)
+  const appointmentIncome = appointments
+    .filter(a => a.payment_status === 'full' || a.payment_status === 'partial')
+    .reduce((sum, a) => sum + a.payment_amount, 0);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,15 +78,15 @@ export default function AdminFinances() {
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Finanzas</h1>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Finanzas</h1>
             <p className="text-muted-foreground">Control de ingresos y gastos</p>
           </div>
           
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="accent-gradient border-0">
+              <Button className="accent-gradient border-0 w-full sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Agregar Transacción
               </Button>
@@ -156,34 +164,44 @@ export default function AdminFinances() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-muted-foreground">Ingresos Totales</span>
+                <span className="text-sm text-muted-foreground">Ingresos Registrados</span>
                 <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
-              <p className="text-3xl font-bold text-green-600">${totalIncome.toFixed(2)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-green-600">${totalIncome.toFixed(2)}</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-muted-foreground">Gastos Totales</span>
+                <span className="text-sm text-muted-foreground">Pagos de Citas</span>
+                <DollarSign className="w-5 h-5 text-blue-500" />
+              </div>
+              <p className="text-2xl sm:text-3xl font-bold text-blue-600">${appointmentIncome.toFixed(2)}</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-muted-foreground">Gastos Totales</span>
                 <TrendingDown className="w-5 h-5 text-red-500" />
               </div>
-              <p className="text-3xl font-bold text-red-600">${totalExpenses.toFixed(2)}</p>
+              <p className="text-2xl sm:text-3xl font-bold text-red-600">${totalExpenses.toFixed(2)}</p>
             </CardContent>
           </Card>
 
           <Card className={netProfit >= 0 ? 'bg-green-50' : 'bg-red-50'}>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-muted-foreground">Ganancia Neta</span>
+                <span className="text-sm text-muted-foreground">Ganancia Neta</span>
                 <DollarSign className={`w-5 h-5 ${netProfit >= 0 ? 'text-green-500' : 'text-red-500'}`} />
               </div>
-              <p className={`text-3xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              <p className={`text-2xl sm:text-3xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                 ${netProfit.toFixed(2)}
               </p>
             </CardContent>
@@ -192,10 +210,13 @@ export default function AdminFinances() {
 
         {/* Transactions Table */}
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Historial de Transacciones</CardTitle>
+            <Button variant="outline" size="sm" onClick={refetch}>
+              Actualizar
+            </Button>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="p-0 overflow-x-auto">
             {loading ? (
               <div className="p-8 text-center text-muted-foreground">Cargando...</div>
             ) : (
@@ -204,7 +225,7 @@ export default function AdminFinances() {
                   <TableRow>
                     <TableHead>Fecha</TableHead>
                     <TableHead>Tipo</TableHead>
-                    <TableHead>Descripción</TableHead>
+                    <TableHead className="hidden sm:table-cell">Descripción</TableHead>
                     <TableHead className="text-right">Monto</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
                   </TableRow>
@@ -212,8 +233,8 @@ export default function AdminFinances() {
                 <TableBody>
                   {transactions.map((tx) => (
                     <TableRow key={tx.id}>
-                      <TableCell>
-                        {format(parseISO(tx.date), 'dd/MM/yyyy', { locale: es })}
+                      <TableCell className="text-sm">
+                        {format(parseISO(tx.date), 'dd/MM/yy', { locale: es })}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={
@@ -228,7 +249,7 @@ export default function AdminFinances() {
                           )}
                         </Badge>
                       </TableCell>
-                      <TableCell>{tx.description}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm">{tx.description}</TableCell>
                       <TableCell className={`text-right font-semibold ${
                         tx.type === 'income' ? 'text-green-600' : 'text-red-600'
                       }`}>

@@ -10,7 +10,7 @@ export type Service = {
   name: string;
   description: string;
   price: number;
-  duration: number; // in minutes
+  duration: number;
   image_url: string | null;
   is_active: boolean;
   created_at: string;
@@ -80,7 +80,9 @@ export type Settings = {
   reservation_amount: number;
   opening_time: string;
   closing_time: string;
-  time_slot_interval: number; // in minutes (30, 60, etc.)
+  time_slot_interval: number;
+  schedule_mode: 'interval' | 'manual';
+  manual_hours: string[];
   primary_color: string;
   accent_color: string;
   feature_tags: FeatureTag[] | null;
@@ -98,5 +100,12 @@ export type Promotion = {
   valid_from: string;
   valid_until: string;
   is_active: boolean;
+  created_at: string;
+};
+
+export type CustomSchedule = {
+  id: string;
+  date: string;
+  hours: string[];
   created_at: string;
 };
