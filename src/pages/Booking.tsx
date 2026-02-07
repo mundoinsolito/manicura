@@ -5,6 +5,7 @@ import { useServices } from '@/hooks/useServices';
 import { useSettings } from '@/hooks/useSettings';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useBlockedTimes } from '@/hooks/useBlockedTimes';
+import { useCustomSchedules } from '@/hooks/useCustomSchedules';
 import { useClients } from '@/hooks/useClients';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +37,7 @@ export default function BookingPage() {
   const { settings } = useSettings();
   const { appointments, addAppointment } = useAppointments();
   const { isTimeBlocked, blockedTimes } = useBlockedTimes();
+  const { getScheduleForDate } = useCustomSchedules();
   const { findClientByPhone, addClient } = useClients();
 
   const [step, setStep] = useState<Step>('service');
@@ -57,75 +59,72 @@ export default function BookingPage() {
   const getTimeSlots = () => {
     if (!booking.date) return [];
 
-    const slots: string[] = [];
     const [openHour, openMin] = settings.opening_time.split(':').map(Number);
     const [closeHour, closeMin] = settings.closing_time.split(':').map(Number);
 
     const dateStr = format(booking.date, 'yyyy-MM-dd');
     const now = new Date();
 
-    // Helper to convert time string to minutes from midnight
     const timeToMinutes = (time: string) => {
       const [h, m] = time.split(':').map(Number);
       return h * 60 + m;
     };
 
-    // Get all booked time ranges for the date (considering duration)
     const bookedRanges = appointments
       .filter(a => a.date === dateStr && a.status !== 'cancelled')
       .map(a => {
         const startMinutes = timeToMinutes(a.time);
-        const duration = a.service?.duration || 60; // Default 60 min if no service info
-        return {
-          start: startMinutes,
-          end: startMinutes + duration
-        };
+        const duration = a.service?.duration || 60;
+        return { start: startMinutes, end: startMinutes + duration };
       });
 
-    // Check if a time slot conflicts with any booking
-    const isSlotConflicting = (slotMinutes: number, serviceDuration: number) => {
-      const slotEnd = slotMinutes + serviceDuration;
-      return bookedRanges.some(range => {
-        // Check if slot overlaps with existing booking
-        return (slotMinutes < range.end && slotEnd > range.start);
-      });
-    };
-
-    // Get duration of selected service
     const serviceDuration = selectedService?.duration || 30;
 
-    const interval = settings.time_slot_interval || 30;
+    const isSlotConflicting = (slotMinutes: number) => {
+      const slotEnd = slotMinutes + serviceDuration;
+      return bookedRanges.some(range => slotMinutes < range.end && slotEnd > range.start);
+    };
 
-    for (let h = openHour; h <= closeHour; h++) {
-      for (let m = 0; m < 60; m += interval) {
-        if (h === openHour && m < openMin) continue;
-        if (h === closeHour - 1 && m > closeMin) continue;
+    // Determine base slots: custom day > manual global > interval
+    let baseSlots: string[];
+    const customHours = getScheduleForDate(dateStr);
 
-        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        const slotMinutes = h * 60 + m;
-
-        // Check if time is in the past for today
-        if (isToday(booking.date)) {
-          const slotTime = new Date(booking.date);
-          slotTime.setHours(h, m, 0, 0);
-          if (isBefore(slotTime, now)) continue;
+    if (customHours) {
+      baseSlots = customHours;
+    } else if (settings.schedule_mode === 'manual' && settings.manual_hours.length > 0) {
+      baseSlots = settings.manual_hours;
+    } else {
+      const slots: string[] = [];
+      const interval = settings.time_slot_interval || 30;
+      for (let h = openHour; h <= closeHour; h++) {
+        for (let m = 0; m < 60; m += interval) {
+          if (h === openHour && m < openMin) continue;
+          if (h === closeHour && m > closeMin) continue;
+          slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
         }
-
-        // Check if blocked
-        if (isTimeBlocked(dateStr, timeStr)) continue;
-
-        // Check if slot conflicts with existing bookings (considering duration)
-        if (isSlotConflicting(slotMinutes, serviceDuration)) continue;
-
-        // Check if service fits before closing time
-        const closeMinutes = closeHour * 60 + closeMin;
-        if (slotMinutes + serviceDuration > closeMinutes) continue;
-
-        slots.push(timeStr);
       }
+      baseSlots = slots;
     }
 
-    return slots;
+    const closeMinutes = closeHour * 60 + closeMin;
+
+    return baseSlots.filter(timeStr => {
+      const [h, m] = timeStr.split(':').map(Number);
+      const slotMinutes = h * 60 + m;
+
+      // Past time check for today
+      if (isToday(booking.date)) {
+        const slotTime = new Date(booking.date);
+        slotTime.setHours(h, m, 0, 0);
+        if (isBefore(slotTime, now)) return false;
+      }
+
+      if (isTimeBlocked(dateStr, timeStr)) return false;
+      if (isSlotConflicting(slotMinutes)) return false;
+      if (slotMinutes + serviceDuration > closeMinutes) return false;
+
+      return true;
+    });
   };
 
   const timeSlots = getTimeSlots();

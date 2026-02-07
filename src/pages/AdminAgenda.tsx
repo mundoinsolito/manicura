@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useBlockedTimes } from '@/hooks/useBlockedTimes';
+import { useCustomSchedules } from '@/hooks/useCustomSchedules';
 import { useSettings } from '@/hooks/useSettings';
 import { useClients } from '@/hooks/useClients';
 import { useServices } from '@/hooks/useServices';
+import { useTransactions } from '@/hooks/useTransactions';
 import { ClientDetailDialog } from '@/components/ClientDetailDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,24 +16,33 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, isFuture, isBefore, startOfToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, User, CreditCard } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, CreditCard, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 import { Client } from '@/lib/supabase';
 
 export default function AdminAgenda() {
   const { appointments, updateAppointment, deleteAppointment, addAppointment } = useAppointments();
   const { blockedTimes, addBlockedTime, deleteBlockedTime, isTimeBlocked } = useBlockedTimes();
+  const { setScheduleForDate, getScheduleForDate } = useCustomSchedules();
   const { settings } = useSettings();
-  const { clients, addClient, findClientByPhone } = useClients();
+  const { clients, addClient } = useClients();
   const { services } = useServices();
+  const { addTransaction } = useTransactions();
 
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [blockDialogOpen, setBlockDialogOpen] = useState(false);
   const [appointmentDialogOpen, setAppointmentDialogOpen] = useState(false);
+  const [hoursDialogOpen, setHoursDialogOpen] = useState(false);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedClientForDetail, setSelectedClientForDetail] = useState<Client | null>(null);
+  const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState<string | null>(null);
+  const [paymentForm, setPaymentForm] = useState({ status: 'pending', amount: '' });
+  const [customHoursForDay, setCustomHoursForDay] = useState<string[]>([]);
+
   const [blockForm, setBlockForm] = useState({
     date: new Date(),
     start_time: settings.opening_time,
@@ -51,7 +62,6 @@ export default function AdminAgenda() {
   const [existingClient, setExistingClient] = useState<Client | null>(null);
   const [isNewClient, setIsNewClient] = useState(false);
 
-  // Get pending appointments
   const pendingAppointments = appointments.filter(a => a.status === 'pending');
   const upcomingAppointments = appointments.filter(a => 
     a.status !== 'cancelled' && 
@@ -122,7 +132,6 @@ export default function AdminAgenda() {
     }
   };
 
-  // Search client by cedula
   const handleCedulaSearch = () => {
     const client = clients.find(c => c.cedula === appointmentForm.cedula.trim());
     if (client) {
@@ -136,20 +145,16 @@ export default function AdminAgenda() {
     }
   };
 
-  // Get available time slots
   const getAvailableTimeSlots = () => {
     if (!appointmentForm.date) return [];
 
-    const slots: string[] = [];
-    const [openHour, openMin] = settings.opening_time.split(':').map(Number);
-    const [closeHour, closeMin] = settings.closing_time.split(':').map(Number);
     const dateStr = format(appointmentForm.date, 'yyyy-MM-dd');
-    const interval = settings.time_slot_interval || 30;
-
     const selectedService = services.find(s => s.id === appointmentForm.service_id);
     const serviceDuration = selectedService?.duration || 30;
 
-    // Get booked time ranges
+    // Check for custom schedule for this date
+    const customHours = getScheduleForDate(dateStr);
+
     const bookedRanges = appointments
       .filter(a => a.date === dateStr && a.status !== 'cancelled')
       .map(a => {
@@ -164,25 +169,38 @@ export default function AdminAgenda() {
       return bookedRanges.some(range => slotMinutes < range.end && slotEnd > range.start);
     };
 
-    for (let h = openHour; h <= closeHour; h++) {
-      for (let m = 0; m < 60; m += interval) {
-        if (h === openHour && m < openMin) continue;
-        if (h === closeHour && m > closeMin) continue;
+    let baseSlots: string[];
 
-        const timeStr = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
-        const slotMinutes = h * 60 + m;
-
-        if (isTimeBlocked(dateStr, timeStr)) continue;
-        if (isSlotConflicting(slotMinutes)) continue;
-
-        const closeMinutes = closeHour * 60 + closeMin;
-        if (slotMinutes + serviceDuration > closeMinutes) continue;
-
-        slots.push(timeStr);
+    if (customHours) {
+      baseSlots = customHours;
+    } else if (settings.schedule_mode === 'manual' && settings.manual_hours.length > 0) {
+      baseSlots = settings.manual_hours;
+    } else {
+      const slots: string[] = [];
+      const [openHour, openMin] = settings.opening_time.split(':').map(Number);
+      const [closeHour, closeMin] = settings.closing_time.split(':').map(Number);
+      const interval = settings.time_slot_interval || 30;
+      for (let h = openHour; h <= closeHour; h++) {
+        for (let m = 0; m < 60; m += interval) {
+          if (h === openHour && m < openMin) continue;
+          if (h === closeHour && m > closeMin) continue;
+          slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+        }
       }
+      baseSlots = slots;
     }
 
-    return slots;
+    const [closeHour, closeMin] = settings.closing_time.split(':').map(Number);
+    const closeMinutes = closeHour * 60 + closeMin;
+
+    return baseSlots.filter(timeStr => {
+      const [h, m] = timeStr.split(':').map(Number);
+      const slotMinutes = h * 60 + m;
+      if (isTimeBlocked(dateStr, timeStr)) return false;
+      if (isSlotConflicting(slotMinutes)) return false;
+      if (slotMinutes + serviceDuration > closeMinutes) return false;
+      return true;
+    });
   };
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
@@ -195,7 +213,6 @@ export default function AdminAgenda() {
 
     let clientId = existingClient?.id;
 
-    // Create new client if needed
     if (isNewClient && !existingClient) {
       if (!appointmentForm.name || !appointmentForm.phone || !appointmentForm.cedula) {
         toast.error('Completa los datos del cliente');
@@ -243,18 +260,96 @@ export default function AdminAgenda() {
     if (result.success) {
       toast.success('Cita creada');
       setAppointmentDialogOpen(false);
-      setAppointmentForm({
-        cedula: '',
-        name: '',
-        phone: '',
-        service_id: '',
-        date: new Date(),
-        time: '',
-      });
+      setAppointmentForm({ cedula: '', name: '', phone: '', service_id: '', date: new Date(), time: '' });
       setExistingClient(null);
       setIsNewClient(false);
     } else {
       toast.error('Error al crear cita');
+    }
+  };
+
+  // Custom hours for specific day
+  const openHoursDialog = () => {
+    if (!selectedDate) return;
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const existing = getScheduleForDate(dateStr);
+    setCustomHoursForDay(existing || []);
+    setHoursDialogOpen(true);
+  };
+
+  const getAllPossibleSlots = () => {
+    const [openH, openM] = settings.opening_time.split(':').map(Number);
+    const [closeH, closeM] = settings.closing_time.split(':').map(Number);
+    const slots: string[] = [];
+    for (let h = openH; h <= closeH; h++) {
+      for (let m = 0; m < 60; m += 30) {
+        if (h === openH && m < openM) continue;
+        if (h === closeH && m > closeM) continue;
+        slots.push(`${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`);
+      }
+    }
+    return slots;
+  };
+
+  const toggleDayHour = (hour: string) => {
+    setCustomHoursForDay(prev =>
+      prev.includes(hour) ? prev.filter(h => h !== hour) : [...prev, hour].sort()
+    );
+  };
+
+  const handleSaveCustomHours = async () => {
+    if (!selectedDate) return;
+    const dateStr = format(selectedDate, 'yyyy-MM-dd');
+    const result = await setScheduleForDate(dateStr, customHoursForDay);
+    if (result.success) {
+      toast.success(customHoursForDay.length > 0 ? 'Horarios personalizados guardados' : 'Horarios personalizados eliminados');
+      setHoursDialogOpen(false);
+    } else {
+      toast.error('Error al guardar');
+    }
+  };
+
+  // Payment management
+  const openPaymentDialog = (appointmentId: string) => {
+    const apt = appointments.find(a => a.id === appointmentId);
+    if (!apt) return;
+    setSelectedAppointmentForPayment(appointmentId);
+    setPaymentForm({
+      status: apt.payment_status,
+      amount: apt.payment_amount.toString(),
+    });
+    setPaymentDialogOpen(true);
+  };
+
+  const handlePaymentUpdate = async () => {
+    if (!selectedAppointmentForPayment) return;
+    const apt = appointments.find(a => a.id === selectedAppointmentForPayment);
+    if (!apt) return;
+
+    const newAmount = parseFloat(paymentForm.amount) || 0;
+    const oldAmount = apt.payment_amount;
+
+    const result = await updateAppointment(selectedAppointmentForPayment, {
+      payment_status: paymentForm.status as any,
+      payment_amount: newAmount,
+    });
+
+    if (result.success) {
+      // Log transaction if payment increased
+      if (newAmount > oldAmount && (paymentForm.status === 'partial' || paymentForm.status === 'full')) {
+        const diff = newAmount - oldAmount;
+        await addTransaction({
+          type: 'income',
+          amount: diff,
+          description: `Pago de ${apt.client?.name || 'cliente'} - ${apt.service?.name || 'servicio'}`,
+          date: apt.date,
+          appointment_id: apt.id,
+        });
+      }
+      toast.success('Pago actualizado');
+      setPaymentDialogOpen(false);
+    } else {
+      toast.error('Error al actualizar pago');
     }
   };
 
@@ -272,29 +367,114 @@ export default function AdminAgenda() {
     cancelled: 'Cancelada',
   };
 
+  const paymentStatusColors: Record<string, string> = {
+    pending: 'bg-red-100 text-red-800 border-red-200',
+    partial: 'bg-amber-100 text-amber-800 border-amber-200',
+    full: 'bg-green-100 text-green-800 border-green-200',
+  };
+
+  const paymentStatusLabels: Record<string, string> = {
+    pending: 'Sin pagar',
+    partial: 'Pago parcial',
+    full: 'Pagado',
+  };
+
+  const renderAppointmentCard = (apt: typeof appointments[0], showDate = false) => (
+    <div key={apt.id} className="p-3 sm:p-4 rounded-lg border bg-card">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="font-medium">{apt.time}</span>
+          {showDate && (
+            <span className="text-sm text-muted-foreground">
+              {format(parseISO(apt.date), "d MMM", { locale: es })}
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1 flex-wrap">
+          <Badge className={statusColors[apt.status]}>{statusLabels[apt.status]}</Badge>
+          <Badge className={paymentStatusColors[apt.payment_status]}>
+            <DollarSign className="w-3 h-3 mr-1" />
+            {paymentStatusLabels[apt.payment_status]}
+          </Badge>
+        </div>
+      </div>
+      
+      <div className="mb-2">
+        <button 
+          className="font-medium text-primary hover:underline text-left"
+          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
+        >
+          {apt.client?.name || 'Cliente'}
+        </button>
+        <p className="text-sm text-muted-foreground">{apt.service?.name} • {apt.service?.duration} min</p>
+        <p className="text-sm text-muted-foreground">{apt.client?.phone}</p>
+        <p className="text-sm text-muted-foreground font-medium">
+          <CreditCard className="w-3 h-3 inline mr-1" />
+          {apt.client?.cedula}
+        </p>
+        <p className="text-sm font-medium text-foreground mt-1">
+          Monto: ${apt.payment_amount.toFixed(2)}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Select
+          value={apt.status}
+          onValueChange={(v) => handleStatusChange(apt.id, v)}
+        >
+          <SelectTrigger className="flex-1 min-w-[120px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="pending">Pendiente</SelectItem>
+            <SelectItem value="confirmed">Confirmada</SelectItem>
+            <SelectItem value="completed">Completada</SelectItem>
+            <SelectItem value="cancelled">Cancelada</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => openPaymentDialog(apt.id)}
+        >
+          <DollarSign className="w-4 h-4 mr-1" />
+          Pago
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          className="text-destructive"
+          onClick={() => handleDeleteAppointment(apt.id)}
+        >
+          <Trash2 className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
+
   return (
     <AdminLayout>
       <div className="space-y-6">
-        <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h1 className="font-display text-3xl font-bold text-foreground">Agenda</h1>
+            <h1 className="font-display text-2xl sm:text-3xl font-bold text-foreground">Agenda</h1>
             <p className="text-muted-foreground">Gestiona tus citas y horarios</p>
           </div>
           
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             <Dialog open={appointmentDialogOpen} onOpenChange={setAppointmentDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="accent-gradient border-0">
+                <Button className="accent-gradient border-0 flex-1 sm:flex-none">
                   <Plus className="w-4 h-4 mr-2" />
                   Nueva Cita
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Agendar Nueva Cita</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleCreateAppointment} className="space-y-4">
-                  {/* Cedula Search */}
                   <div className="space-y-2">
                     <Label>Buscar cliente por cédula</Label>
                     <div className="flex gap-2">
@@ -340,7 +520,6 @@ export default function AdminAgenda() {
                     </div>
                   )}
 
-                  {/* Service */}
                   <div className="space-y-2">
                     <Label>Servicio</Label>
                     <Select
@@ -360,7 +539,6 @@ export default function AdminAgenda() {
                     </Select>
                   </div>
 
-                  {/* Date */}
                   <div className="space-y-2">
                     <Label>Fecha</Label>
                     <Calendar
@@ -373,11 +551,10 @@ export default function AdminAgenda() {
                     />
                   </div>
 
-                  {/* Time */}
                   <div className="space-y-2">
                     <Label>Hora</Label>
                     {appointmentForm.service_id ? (
-                      <div className="grid grid-cols-4 gap-2 max-h-32 overflow-y-auto">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-32 overflow-y-auto">
                         {getAvailableTimeSlots().map((time) => (
                           <Button
                             key={time}
@@ -404,12 +581,12 @@ export default function AdminAgenda() {
 
             <Dialog open={blockDialogOpen} onOpenChange={setBlockDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline">
+                <Button variant="outline" className="flex-1 sm:flex-none">
                   <Ban className="w-4 h-4 mr-2" />
-                  Bloquear Horario
+                  Bloquear
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Bloquear Horario</DialogTitle>
                 </DialogHeader>
@@ -424,7 +601,6 @@ export default function AdminAgenda() {
                       className="rounded-lg border pointer-events-auto"
                     />
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Hora inicio</Label>
@@ -443,7 +619,6 @@ export default function AdminAgenda() {
                       />
                     </div>
                   </div>
-
                   <div className="space-y-2">
                     <Label>Razón (opcional)</Label>
                     <Input
@@ -452,7 +627,6 @@ export default function AdminAgenda() {
                       placeholder="Ej: Descanso, Capacitación..."
                     />
                   </div>
-
                   <Button type="submit" className="w-full accent-gradient border-0">
                     Bloquear
                   </Button>
@@ -466,31 +640,24 @@ export default function AdminAgenda() {
           {/* Calendar */}
           <Card className="lg:col-span-2">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <CalendarIcon className="w-5 h-5 text-primary" />
-                {format(currentMonth, 'MMMM yyyy', { locale: es })}
+                <span className="hidden sm:inline">{format(currentMonth, 'MMMM yyyy', { locale: es })}</span>
+                <span className="sm:hidden">{format(currentMonth, 'MMM yyyy', { locale: es })}</span>
               </CardTitle>
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-                >
+                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <Button 
-                  variant="outline" 
-                  size="icon"
-                  onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-                >
+                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-7 gap-1">
-                {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((day) => (
-                  <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+            <CardContent className="overflow-x-auto">
+              <div className="grid grid-cols-7 gap-1 min-w-[280px]">
+                {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map((day) => (
+                  <div key={day} className="text-center text-xs sm:text-sm font-medium text-muted-foreground py-1 sm:py-2">
                     {day}
                   </div>
                 ))}
@@ -508,23 +675,23 @@ export default function AdminAgenda() {
                     <button
                       key={day.toISOString()}
                       onClick={() => setSelectedDate(day)}
-                      className={`p-2 min-h-[80px] rounded-lg border transition-colors text-left ${
+                      className={`p-1 sm:p-2 min-h-[48px] sm:min-h-[80px] rounded-lg border transition-colors text-left ${
                         isSelected 
                           ? 'border-primary bg-primary/5' 
                           : 'border-transparent hover:bg-muted'
                       }`}
                     >
-                      <div className="text-sm font-medium mb-1">
+                      <div className="text-xs sm:text-sm font-medium mb-1">
                         {format(day, 'd')}
                       </div>
                       {dayAppointments.length > 0 && (
-                        <div className="text-xs accent-gradient text-primary-foreground px-1 rounded mb-1">
+                        <div className="text-[10px] sm:text-xs accent-gradient text-primary-foreground px-1 rounded mb-1 truncate">
                           {dayAppointments.length} cita{dayAppointments.length > 1 ? 's' : ''}
                         </div>
                       )}
                       {dayBlocked.length > 0 && (
-                        <div className="text-xs bg-destructive/10 text-destructive px-1 rounded">
-                          Bloqueado
+                        <div className="text-[10px] sm:text-xs bg-destructive/10 text-destructive px-1 rounded truncate">
+                          Bloq.
                         </div>
                       )}
                     </button>
@@ -537,111 +704,51 @@ export default function AdminAgenda() {
           {/* Day Detail */}
           <Card>
             <CardHeader>
-              <CardTitle>
+              <CardTitle className="text-base sm:text-lg">
                 {selectedDate 
                   ? format(selectedDate, "EEEE d 'de' MMMM", { locale: es })
                   : 'Selecciona un día'
                 }
               </CardTitle>
+              {selectedDate && (
+                <Button variant="outline" size="sm" onClick={openHoursDialog}>
+                  <Clock className="w-4 h-4 mr-2" />
+                  Horarios del día
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               {selectedDate ? (
-                <div className="space-y-4">
-                  {/* Blocked times */}
+                <div className="space-y-3">
                   {selectedDateBlocked.map((block) => (
                     <div 
                       key={block.id}
                       className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-between"
                     >
                       <div>
-                        <div className="flex items-center gap-2 text-destructive font-medium">
+                        <div className="flex items-center gap-2 text-destructive font-medium text-sm">
                           <Ban className="w-4 h-4" />
                           Bloqueado
                         </div>
-                        <p className="text-sm text-destructive/80">
-                          {block.start_time} - {block.end_time}
-                        </p>
-                        {block.reason && (
-                          <p className="text-xs text-destructive/60">{block.reason}</p>
-                        )}
+                        <p className="text-sm text-destructive/80">{block.start_time} - {block.end_time}</p>
+                        {block.reason && <p className="text-xs text-destructive/60">{block.reason}</p>}
                       </div>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="text-destructive"
-                        onClick={() => handleDeleteBlock(block.id)}
-                      >
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteBlock(block.id)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   ))}
 
-                  {/* Appointments */}
-                  {selectedDateAppointments.map((apt) => (
-                    <div 
-                      key={apt.id}
-                      className="p-3 rounded-lg border bg-card"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-muted-foreground" />
-                          <span className="font-medium">{apt.time}</span>
-                        </div>
-                        <Badge className={statusColors[apt.status]}>
-                          {statusLabels[apt.status]}
-                        </Badge>
-                      </div>
-                      
-                      <div className="mb-2">
-                        <button 
-                          className="font-medium text-primary hover:underline text-left"
-                          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
-                        >
-                          {apt.client?.name || 'Cliente'}
-                        </button>
-                        <p className="text-sm text-muted-foreground">{apt.service?.name}</p>
-                        <p className="text-sm text-muted-foreground">{apt.client?.phone}</p>
-                        <p className="text-sm text-muted-foreground font-medium">
-                          <CreditCard className="w-3 h-3 inline mr-1" />
-                          {apt.client?.cedula}
-                        </p>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Select
-                          value={apt.status}
-                          onValueChange={(v) => handleStatusChange(apt.id, v)}
-                        >
-                          <SelectTrigger className="flex-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="pending">Pendiente</SelectItem>
-                            <SelectItem value="confirmed">Confirmada</SelectItem>
-                            <SelectItem value="completed">Completada</SelectItem>
-                            <SelectItem value="cancelled">Cancelada</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <Button 
-                          variant="ghost" 
-                          size="icon"
-                          className="text-destructive"
-                          onClick={() => handleDeleteAppointment(apt.id)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                  {selectedDateAppointments.map(apt => renderAppointmentCard(apt))}
 
                   {selectedDateAppointments.length === 0 && selectedDateBlocked.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8">
+                    <p className="text-center text-muted-foreground py-8 text-sm">
                       No hay citas ni bloqueos para este día
                     </p>
                   )}
                 </div>
               ) : (
-                <p className="text-center text-muted-foreground py-8">
+                <p className="text-center text-muted-foreground py-8 text-sm">
                   Selecciona un día del calendario
                 </p>
               )}
@@ -649,56 +756,53 @@ export default function AdminAgenda() {
           </Card>
         </div>
 
-        {/* Pending Appointments Section */}
+        {/* Pending Appointments */}
         {pendingAppointments.length > 0 && (
           <Card className="border-amber-200 bg-amber-50/50">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-amber-800">
+              <CardTitle className="flex items-center gap-2 text-amber-800 text-base sm:text-lg">
                 <AlertCircle className="w-5 h-5" />
-                Reservas Pendientes de Aprobación ({pendingAppointments.length})
+                Pendientes ({pendingAppointments.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
                 {pendingAppointments.map((apt) => (
-                  <div 
-                    key={apt.id}
-                    className="p-4 rounded-lg border border-amber-200 bg-background flex flex-col sm:flex-row sm:items-center gap-4"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <button 
-                          className="font-semibold text-foreground hover:text-primary hover:underline"
-                          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
-                        >
-                          {apt.client?.name || 'Cliente'}
-                        </button>
-                        <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pendiente</Badge>
+                  <div key={apt.id} className="p-3 sm:p-4 rounded-lg border border-amber-200 bg-background">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <button 
+                            className="font-semibold text-foreground hover:text-primary hover:underline"
+                            onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
+                          >
+                            {apt.client?.name || 'Cliente'}
+                          </button>
+                          <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pendiente</Badge>
+                          <Badge className={paymentStatusColors[apt.payment_status]}>
+                            {paymentStatusLabels[apt.payment_status]}
+                          </Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          {apt.service?.name} • {format(parseISO(apt.date), "d MMM", { locale: es })} {apt.time}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          Cédula: {apt.client?.cedula} • ${apt.payment_amount.toFixed(2)}
+                        </p>
                       </div>
-                      <p className="text-sm text-muted-foreground">
-                        {apt.service?.name} • {format(parseISO(apt.date), "d 'de' MMMM", { locale: es })} a las {apt.time}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Tel: {apt.client?.phone} • <span className="font-medium">Cédula: {apt.client?.cedula}</span> • Monto: ${apt.payment_amount}
-                      </p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button 
-                        size="sm"
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                        onClick={() => handleStatusChange(apt.id, 'confirmed')}
-                      >
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        Aceptar
-                      </Button>
-                      <Button 
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => handleStatusChange(apt.id, 'cancelled')}
-                      >
-                        <XCircle className="w-4 h-4 mr-1" />
-                        Rechazar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleStatusChange(apt.id, 'confirmed')}>
+                          <CheckCircle className="w-4 h-4 mr-1" />
+                          Aceptar
+                        </Button>
+                        <Button size="sm" variant="destructive" onClick={() => handleStatusChange(apt.id, 'cancelled')}>
+                          <XCircle className="w-4 h-4 mr-1" />
+                          Rechazar
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => openPaymentDialog(apt.id)}>
+                          <DollarSign className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -707,10 +811,10 @@ export default function AdminAgenda() {
           </Card>
         )}
 
-        {/* All Upcoming Appointments List */}
+        {/* All Upcoming Appointments */}
         <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
               <Clock className="w-5 h-5 text-primary" />
               Próximas Citas ({upcomingAppointments.length})
             </CardTitle>
@@ -718,59 +822,7 @@ export default function AdminAgenda() {
           <CardContent>
             {upcomingAppointments.length > 0 ? (
               <div className="space-y-3">
-                {upcomingAppointments.map((apt) => (
-                  <div 
-                    key={apt.id}
-                    className="p-4 rounded-lg border bg-card flex flex-col sm:flex-row sm:items-center gap-4"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <button 
-                          className="font-semibold text-foreground hover:text-primary hover:underline"
-                          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
-                        >
-                          {apt.client?.name || 'Cliente'}
-                        </button>
-                        <Badge className={statusColors[apt.status]}>
-                          {statusLabels[apt.status]}
-                        </Badge>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {apt.service?.name} • {apt.service?.duration} min
-                      </p>
-                      <p className="text-sm font-medium text-foreground">
-                        {format(parseISO(apt.date), "EEEE d 'de' MMMM", { locale: es })} a las {apt.time}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        Tel: {apt.client?.phone} • <span className="font-medium">Cédula: {apt.client?.cedula}</span>
-                      </p>
-                    </div>
-                    <div className="flex gap-2 items-center">
-                      <Select
-                        value={apt.status}
-                        onValueChange={(v) => handleStatusChange(apt.id, v)}
-                      >
-                        <SelectTrigger className="w-36">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="pending">Pendiente</SelectItem>
-                          <SelectItem value="confirmed">Confirmada</SelectItem>
-                          <SelectItem value="completed">Completada</SelectItem>
-                          <SelectItem value="cancelled">Cancelada</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button 
-                        variant="ghost" 
-                        size="icon"
-                        className="text-destructive"
-                        onClick={() => handleDeleteAppointment(apt.id)}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                {upcomingAppointments.map(apt => renderAppointmentCard(apt, true))}
               </div>
             ) : (
               <p className="text-center text-muted-foreground py-8">
@@ -779,6 +831,92 @@ export default function AdminAgenda() {
             )}
           </CardContent>
         </Card>
+
+        {/* Custom Hours Dialog */}
+        <Dialog open={hoursDialogOpen} onOpenChange={setHoursDialogOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                Horarios para {selectedDate ? format(selectedDate, "d 'de' MMMM", { locale: es }) : ''}
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Selecciona las horas que quieres que aparezcan disponibles solo para este día. Si no seleccionas ninguna, se usará el horario general.
+              </p>
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                {getAllPossibleSlots().map((slot) => (
+                  <label
+                    key={slot}
+                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
+                      customHoursForDay.includes(slot)
+                        ? 'bg-primary/10 border-primary'
+                        : 'border-border hover:bg-muted'
+                    }`}
+                  >
+                    <Checkbox
+                      checked={customHoursForDay.includes(slot)}
+                      onCheckedChange={() => toggleDayHour(slot)}
+                    />
+                    <span className="text-sm font-medium">{slot}</span>
+                  </label>
+                ))}
+              </div>
+              {customHoursForDay.length > 0 && (
+                <p className="text-xs text-primary font-medium">
+                  {customHoursForDay.length} hora(s): {customHoursForDay.join(', ')}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <Button onClick={handleSaveCustomHours} className="flex-1 accent-gradient border-0">
+                  Guardar
+                </Button>
+                {customHoursForDay.length > 0 && (
+                  <Button variant="outline" onClick={() => setCustomHoursForDay([])}>
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Payment Dialog */}
+        <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle>Gestionar Pago</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label>Estado de pago</Label>
+                <Select value={paymentForm.status} onValueChange={(v) => setPaymentForm({ ...paymentForm, status: v })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Sin pagar</SelectItem>
+                    <SelectItem value="partial">Pago parcial</SelectItem>
+                    <SelectItem value="full">Pagado completo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Monto pagado ($)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={paymentForm.amount}
+                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                />
+              </div>
+              <Button onClick={handlePaymentUpdate} className="w-full accent-gradient border-0">
+                Actualizar Pago
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Client Detail Dialog */}
         <ClientDetailDialog 
