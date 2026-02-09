@@ -30,7 +30,7 @@ const Index = () => {
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: `url(${settings.cover_image_url})` }}
           >
-            <div className="absolute inset-0 bg-background/70 backdrop-blur-[2px]" />
+            <div className="absolute inset-0 bg-black/35" />
           </div>
         ) : (
           <div className="absolute inset-0 hero-gradient" />
@@ -43,16 +43,16 @@ const Index = () => {
         
         <div className="container mx-auto px-4 py-20 relative z-10">
           <div className="max-w-3xl mx-auto text-center">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-background/60 backdrop-blur-sm border border-border/50 mb-8 animate-fade-up">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-black/30 backdrop-blur-sm border border-white/20 mb-8 animate-fade-up">
               <Sparkles className="w-4 h-4 text-primary" />
-              <span className="text-sm text-muted-foreground">Belleza profesional para tus uñas</span>
+              <span className="text-sm text-white/80">Belleza profesional para tus uñas</span>
             </div>
             
-            <h1 className="font-display text-5xl md:text-7xl font-bold text-foreground mb-6 animate-fade-up" style={{ animationDelay: '0.1s' }}>
+            <h1 className="font-display text-5xl md:text-7xl font-bold text-white mb-6 animate-fade-up drop-shadow-lg" style={{ animationDelay: '0.1s' }}>
               {settings.business_name}
             </h1>
             
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 animate-fade-up" style={{ animationDelay: '0.2s' }}>
+            <p className="text-lg md:text-xl text-white/90 mb-10 animate-fade-up drop-shadow-md" style={{ animationDelay: '0.2s' }}>
               Déjate consentir con nuestros servicios de manicura profesional. 
               Calidad, estilo y cuidado en cada detalle.
             </p>
