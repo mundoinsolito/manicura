@@ -19,9 +19,10 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, isFuture, isBefore, startOfToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, CreditCard, DollarSign } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, CreditCard, DollarSign, Search, MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { Client } from '@/lib/supabase';
+import { formatTime12h, openWhatsApp } from '@/lib/utils';
 
 export default function AdminAgenda() {
   const { appointments, updateAppointment, deleteAppointment, addAppointment } = useAppointments();
@@ -42,6 +43,7 @@ export default function AdminAgenda() {
   const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState<string | null>(null);
   const [paymentForm, setPaymentForm] = useState({ status: 'pending', amount: '' });
   const [customHoursForDay, setCustomHoursForDay] = useState<string[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [blockForm, setBlockForm] = useState({
     date: new Date(),
@@ -73,6 +75,20 @@ export default function AdminAgenda() {
   });
 
   const activeServices = services.filter(s => s.is_active);
+
+  // Filter appointments by search
+  const filterBySearch = (apts: typeof appointments) => {
+    if (!searchTerm.trim()) return apts;
+    const term = searchTerm.toLowerCase().trim();
+    return apts.filter(a =>
+      a.client?.name?.toLowerCase().includes(term) ||
+      a.client?.cedula?.includes(term) ||
+      a.client?.phone?.includes(term)
+    );
+  };
+
+  const filteredPending = filterBySearch(pendingAppointments);
+  const filteredUpcoming = filterBySearch(upcomingAppointments);
 
   const monthDays = eachDayOfInterval({
     start: startOfMonth(currentMonth),
@@ -152,7 +168,6 @@ export default function AdminAgenda() {
     const selectedService = services.find(s => s.id === appointmentForm.service_id);
     const serviceDuration = selectedService?.duration || 30;
 
-    // Check for custom schedule for this date
     const customHours = getScheduleForDate(dateStr);
 
     const bookedRanges = appointments
@@ -335,7 +350,6 @@ export default function AdminAgenda() {
     });
 
     if (result.success) {
-      // Log transaction if payment increased
       if (newAmount > oldAmount && (paymentForm.status === 'partial' || paymentForm.status === 'full')) {
         const diff = newAmount - oldAmount;
         await addTransaction({
@@ -384,7 +398,7 @@ export default function AdminAgenda() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
           <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-          <span className="font-medium">{apt.time}</span>
+          <span className="font-medium">{formatTime12h(apt.time)}</span>
           {showDate && (
             <span className="text-sm text-muted-foreground">
               {format(parseISO(apt.date), "d MMM", { locale: es })}
@@ -401,12 +415,25 @@ export default function AdminAgenda() {
       </div>
       
       <div className="mb-2">
-        <button 
-          className="font-medium text-primary hover:underline text-left"
-          onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
-        >
-          {apt.client?.name || 'Cliente'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            className="font-medium text-primary hover:underline text-left"
+            onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
+          >
+            {apt.client?.name || 'Cliente'}
+          </button>
+          {apt.client?.phone && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
+              onClick={(e) => { e.stopPropagation(); openWhatsApp(apt.client!.phone); }}
+              title="WhatsApp"
+            >
+              <MessageCircle className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
         <p className="text-sm text-muted-foreground">{apt.service?.name} • {apt.service?.duration} min</p>
         <p className="text-sm text-muted-foreground">{apt.client?.phone}</p>
         <p className="text-sm text-muted-foreground font-medium">
@@ -563,7 +590,7 @@ export default function AdminAgenda() {
                             size="sm"
                             onClick={() => setAppointmentForm({ ...appointmentForm, time })}
                           >
-                            {time}
+                            {formatTime12h(time)}
                           </Button>
                         ))}
                       </div>
@@ -634,6 +661,17 @@ export default function AdminAgenda() {
               </DialogContent>
             </Dialog>
           </div>
+        </div>
+
+        {/* Search Bar */}
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar por nombre, cédula o teléfono..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+          />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -730,7 +768,7 @@ export default function AdminAgenda() {
                           <Ban className="w-4 h-4" />
                           Bloqueado
                         </div>
-                        <p className="text-sm text-destructive/80">{block.start_time} - {block.end_time}</p>
+                        <p className="text-sm text-destructive/80">{formatTime12h(block.start_time)} - {formatTime12h(block.end_time)}</p>
                         {block.reason && <p className="text-xs text-destructive/60">{block.reason}</p>}
                       </div>
                       <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteBlock(block.id)}>
@@ -757,17 +795,17 @@ export default function AdminAgenda() {
         </div>
 
         {/* Pending Appointments */}
-        {pendingAppointments.length > 0 && (
+        {filteredPending.length > 0 && (
           <Card className="border-amber-200 bg-amber-50/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-amber-800 text-base sm:text-lg">
                 <AlertCircle className="w-5 h-5" />
-                Pendientes ({pendingAppointments.length})
+                Pendientes ({filteredPending.length})
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {pendingAppointments.map((apt) => (
+                {filteredPending.map((apt) => (
                   <div key={apt.id} className="p-3 sm:p-4 rounded-lg border border-amber-200 bg-background">
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                       <div className="flex-1">
@@ -778,13 +816,24 @@ export default function AdminAgenda() {
                           >
                             {apt.client?.name || 'Cliente'}
                           </button>
+                          {apt.client?.phone && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-50"
+                              onClick={(e) => { e.stopPropagation(); openWhatsApp(apt.client!.phone); }}
+                              title="WhatsApp"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                           <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pendiente</Badge>
                           <Badge className={paymentStatusColors[apt.payment_status]}>
                             {paymentStatusLabels[apt.payment_status]}
                           </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
-                          {apt.service?.name} • {format(parseISO(apt.date), "d MMM", { locale: es })} {apt.time}
+                          {apt.service?.name} • {format(parseISO(apt.date), "d MMM", { locale: es })} {formatTime12h(apt.time)}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           Cédula: {apt.client?.cedula} • ${apt.payment_amount.toFixed(2)}
@@ -816,17 +865,17 @@ export default function AdminAgenda() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
               <Clock className="w-5 h-5 text-primary" />
-              Próximas Citas ({upcomingAppointments.length})
+              Próximas Citas ({filteredUpcoming.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {upcomingAppointments.length > 0 ? (
+            {filteredUpcoming.length > 0 ? (
               <div className="space-y-3">
-                {upcomingAppointments.map(apt => renderAppointmentCard(apt, true))}
+                {filteredUpcoming.map(apt => renderAppointmentCard(apt, true))}
               </div>
             ) : (
               <p className="text-center text-muted-foreground py-8">
-                No hay citas próximas programadas
+                {searchTerm ? 'No se encontraron citas con esa búsqueda' : 'No hay citas próximas programadas'}
               </p>
             )}
           </CardContent>
@@ -858,13 +907,13 @@ export default function AdminAgenda() {
                       checked={customHoursForDay.includes(slot)}
                       onCheckedChange={() => toggleDayHour(slot)}
                     />
-                    <span className="text-sm font-medium">{slot}</span>
+                    <span className="text-sm font-medium">{formatTime12h(slot)}</span>
                   </label>
                 ))}
               </div>
               {customHoursForDay.length > 0 && (
                 <p className="text-xs text-primary font-medium">
-                  {customHoursForDay.length} hora(s): {customHoursForDay.join(', ')}
+                  {customHoursForDay.length} hora(s): {customHoursForDay.map(h => formatTime12h(h)).join(', ')}
                 </p>
               )}
               <div className="flex gap-2">

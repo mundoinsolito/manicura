@@ -71,6 +71,19 @@ export type FeatureTag = {
   enabled: boolean;
 };
 
+export type SectionColors = {
+  background: string;
+  foreground: string;
+  card_bg: string;
+  card_text: string;
+  heading_color: string;
+  body_text: string;
+  button_bg: string;
+  button_text: string;
+  accent_bg: string;
+  accent_text: string;
+};
+
 export type Settings = {
   id: string;
   business_name: string;
@@ -85,6 +98,7 @@ export type Settings = {
   manual_hours: string[];
   primary_color: string;
   accent_color: string;
+  section_colors: SectionColors | null;
   feature_tags: FeatureTag[] | null;
   created_at: string;
   updated_at: string;

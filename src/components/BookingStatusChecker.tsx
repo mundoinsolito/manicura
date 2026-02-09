@@ -8,6 +8,7 @@ import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { Search, CreditCard, Calendar, Clock, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatTime12h } from '@/lib/utils';
 
 export function BookingStatusChecker() {
   const [open, setOpen] = useState(false);
@@ -32,34 +33,23 @@ export function BookingStatusChecker() {
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cedula.trim()) {
-      toast.error('Ingresa tu cédula');
-      return;
-    }
+    if (!cedula.trim()) { toast.error('Ingresa tu cédula'); return; }
 
     setLoading(true);
     setSearched(true);
 
     try {
-      // First find client by cedula
       const { data: client } = await supabase
         .from('clients')
         .select('id')
         .eq('cedula', cedula.trim())
         .single();
 
-      if (!client) {
-        setAppointments([]);
-        return;
-      }
+      if (!client) { setAppointments([]); return; }
 
-      // Get appointments for this client
       const { data: apts } = await supabase
         .from('appointments')
-        .select(`
-          *,
-          service:services(*)
-        `)
+        .select(`*, service:services(*)`)
         .eq('client_id', client.id)
         .order('date', { ascending: false })
         .limit(10);
@@ -75,17 +65,13 @@ export function BookingStatusChecker() {
 
   const handleOpenChange = (isOpen: boolean) => {
     setOpen(isOpen);
-    if (!isOpen) {
-      setCedula('');
-      setAppointments([]);
-      setSearched(false);
-    }
+    if (!isOpen) { setCedula(''); setAppointments([]); setSearched(false); }
   };
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
-        <Button variant="outline" className="gap-2">
+        <Button variant="outline" className="gap-2 bg-black/20 border-white/30 text-white hover:bg-black/30 hover:text-white backdrop-blur-sm">
           <Search className="w-4 h-4" />
           Consultar Mi Cita
         </Button>
@@ -99,12 +85,7 @@ export function BookingStatusChecker() {
           <div className="flex gap-2">
             <div className="relative flex-1">
               <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                placeholder="Ingresa tu cédula"
-                value={cedula}
-                onChange={(e) => setCedula(e.target.value)}
-                className="pl-10"
-              />
+              <Input placeholder="Ingresa tu cédula" value={cedula} onChange={(e) => setCedula(e.target.value)} className="pl-10" />
             </div>
             <Button type="submit" disabled={loading}>
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
@@ -119,9 +100,7 @@ export function BookingStatusChecker() {
                 {appointments.map((apt) => (
                   <div key={apt.id} className="p-3 rounded-lg border bg-card">
                     <div className="flex items-center justify-between mb-2">
-                      <Badge className={statusColors[apt.status]}>
-                        {statusLabels[apt.status]}
-                      </Badge>
+                      <Badge className={statusColors[apt.status]}>{statusLabels[apt.status]}</Badge>
                       <span className="text-sm font-medium">${apt.payment_amount}</span>
                     </div>
                     <p className="font-medium">{apt.service?.name}</p>
@@ -132,7 +111,7 @@ export function BookingStatusChecker() {
                       </span>
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {apt.time}
+                        {formatTime12h(apt.time)}
                       </span>
                     </div>
                   </div>

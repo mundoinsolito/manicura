@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
-import { useSettings } from '@/hooks/useSettings';
+import { useSettings, defaultSectionColors } from '@/hooks/useSettings';
 import { ImageUpload } from '@/components/ImageUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Store, Clock, DollarSign, Palette, Phone, Save, Loader2, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
-import { FeatureTag } from '@/lib/supabase';
+import { FeatureTag, SectionColors } from '@/lib/supabase';
+import { formatTime12h } from '@/lib/utils';
 
 const defaultFeatureTags: FeatureTag[] = [
   { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
@@ -34,6 +35,19 @@ function generateAllSlots(openTime: string, closeTime: string): string[] {
   return slots;
 }
 
+const colorLabels: Record<keyof SectionColors, string> = {
+  background: 'Fondo general',
+  foreground: 'Texto principal',
+  card_bg: 'Fondo de tarjetas',
+  card_text: 'Texto de tarjetas',
+  heading_color: 'Títulos',
+  body_text: 'Texto de párrafos',
+  button_bg: 'Fondo de botones',
+  button_text: 'Texto de botones',
+  accent_bg: 'Fondo de acento',
+  accent_text: 'Texto de acento',
+};
+
 export default function AdminSettings() {
   const { settings, loading, updateSettings } = useSettings();
   const [saving, setSaving] = useState(false);
@@ -52,6 +66,10 @@ export default function AdminSettings() {
     primary_color: settings.primary_color,
     accent_color: settings.accent_color,
   });
+
+  const [sectionColors, setSectionColors] = useState<SectionColors>(
+    settings.section_colors || defaultSectionColors
+  );
 
   const [featureTags, setFeatureTags] = useState<FeatureTag[]>(
     settings.feature_tags || defaultFeatureTags
@@ -74,6 +92,7 @@ export default function AdminSettings() {
         accent_color: settings.accent_color,
       });
       setFeatureTags(settings.feature_tags || defaultFeatureTags);
+      setSectionColors(settings.section_colors || defaultSectionColors);
     }
   }, [loading, settings]);
 
@@ -94,6 +113,10 @@ export default function AdminSettings() {
     ));
   };
 
+  const updateSectionColor = (key: keyof SectionColors, value: string) => {
+    setSectionColors(prev => ({ ...prev, [key]: value }));
+  };
+
   const handleSave = async () => {
     setSaving(true);
     
@@ -110,6 +133,7 @@ export default function AdminSettings() {
       manual_hours: form.manual_hours,
       primary_color: form.primary_color,
       accent_color: form.accent_color,
+      section_colors: sectionColors,
       feature_tags: featureTags,
     });
 
@@ -146,11 +170,7 @@ export default function AdminSettings() {
             onClick={handleSave}
             disabled={saving}
           >
-            {saving ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4 mr-2" />
-            )}
+            {saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
             Guardar Cambios
           </Button>
         </div>
@@ -162,45 +182,22 @@ export default function AdminSettings() {
               <Store className="w-5 h-5 text-primary" />
               Información del Negocio
             </CardTitle>
-            <CardDescription>
-              Estos datos se mostrarán en tu página pública
-            </CardDescription>
+            <CardDescription>Estos datos se mostrarán en tu página pública</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="business_name">Nombre del negocio</Label>
-              <Input
-                id="business_name"
-                value={form.business_name}
-                onChange={(e) => setForm({ ...form, business_name: e.target.value })}
-                placeholder="Mi Salón de Uñas"
-              />
+              <Input id="business_name" value={form.business_name} onChange={(e) => setForm({ ...form, business_name: e.target.value })} placeholder="Mi Salón de Uñas" />
             </div>
-
             <div className="space-y-2">
               <Label>Logo del negocio</Label>
-              <ImageUpload
-                currentImage={form.logo_url}
-                onImageUploaded={(url) => setForm({ ...form, logo_url: url })}
-                onImageRemoved={() => setForm({ ...form, logo_url: '' })}
-                aspectRatio="1/1"
-              />
-              <p className="text-xs text-muted-foreground">
-                Imagen cuadrada recomendada (ej: 200x200px)
-              </p>
+              <ImageUpload currentImage={form.logo_url} onImageUploaded={(url) => setForm({ ...form, logo_url: url })} onImageRemoved={() => setForm({ ...form, logo_url: '' })} aspectRatio="1/1" />
+              <p className="text-xs text-muted-foreground">Imagen cuadrada recomendada (ej: 200x200px)</p>
             </div>
-
             <div className="space-y-2">
               <Label>Imagen de portada (fondo del inicio)</Label>
-              <ImageUpload
-                currentImage={form.cover_image_url}
-                onImageUploaded={(url) => setForm({ ...form, cover_image_url: url })}
-                onImageRemoved={() => setForm({ ...form, cover_image_url: '' })}
-                aspectRatio="21/9"
-              />
-              <p className="text-xs text-muted-foreground">
-                Esta imagen aparecerá de fondo en la sección principal
-              </p>
+              <ImageUpload currentImage={form.cover_image_url} onImageUploaded={(url) => setForm({ ...form, cover_image_url: url })} onImageRemoved={() => setForm({ ...form, cover_image_url: '' })} aspectRatio="21/9" />
+              <p className="text-xs text-muted-foreground">Esta imagen aparecerá de fondo en la sección principal</p>
             </div>
           </CardContent>
         </Card>
@@ -212,22 +209,13 @@ export default function AdminSettings() {
               <Phone className="w-5 h-5 text-primary" />
               Contacto
             </CardTitle>
-            <CardDescription>
-              Número de WhatsApp para recibir reservas
-            </CardDescription>
+            <CardDescription>Número de WhatsApp para recibir reservas</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <Label htmlFor="whatsapp">Número de WhatsApp</Label>
-              <Input
-                id="whatsapp"
-                value={form.whatsapp_number}
-                onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })}
-                placeholder="+58 412 000 0000"
-              />
-              <p className="text-xs text-muted-foreground">
-                Incluye el código de país (ej: +58 para Venezuela)
-              </p>
+              <Input id="whatsapp" value={form.whatsapp_number} onChange={(e) => setForm({ ...form, whatsapp_number: e.target.value })} placeholder="+58 412 000 0000" />
+              <p className="text-xs text-muted-foreground">Incluye el código de país (ej: +58 para Venezuela)</p>
             </div>
           </CardContent>
         </Card>
@@ -239,40 +227,25 @@ export default function AdminSettings() {
               <Clock className="w-5 h-5 text-primary" />
               Horario de Atención
             </CardTitle>
-            <CardDescription>
-              Define tu horario de trabajo y cómo se generan los horarios disponibles
-            </CardDescription>
+            <CardDescription>Define tu horario de trabajo y cómo se generan los horarios disponibles</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Hora de apertura</Label>
-                <Input
-                  type="time"
-                  value={form.opening_time}
-                  onChange={(e) => setForm({ ...form, opening_time: e.target.value })}
-                />
+                <Input type="time" value={form.opening_time} onChange={(e) => setForm({ ...form, opening_time: e.target.value })} />
               </div>
               <div className="space-y-2">
                 <Label>Hora de cierre</Label>
-                <Input
-                  type="time"
-                  value={form.closing_time}
-                  onChange={(e) => setForm({ ...form, closing_time: e.target.value })}
-                />
+                <Input type="time" value={form.closing_time} onChange={(e) => setForm({ ...form, closing_time: e.target.value })} />
               </div>
             </div>
 
             {/* Schedule Mode */}
             <div className="space-y-3 p-4 rounded-lg border border-border">
               <Label className="font-semibold">Modo de horarios</Label>
-              <Select
-                value={form.schedule_mode}
-                onValueChange={(v) => setForm({ ...form, schedule_mode: v as 'interval' | 'manual' })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
+              <Select value={form.schedule_mode} onValueChange={(v) => setForm({ ...form, schedule_mode: v as 'interval' | 'manual' })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="interval">Automático por intervalo</SelectItem>
                   <SelectItem value="manual">Selección manual de horas</SelectItem>
@@ -282,13 +255,8 @@ export default function AdminSettings() {
               {form.schedule_mode === 'interval' ? (
                 <div className="space-y-2">
                   <Label>Intervalo de horarios</Label>
-                  <Select
-                    value={form.time_slot_interval}
-                    onValueChange={(v) => setForm({ ...form, time_slot_interval: v })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Seleccionar intervalo" />
-                    </SelectTrigger>
+                  <Select value={form.time_slot_interval} onValueChange={(v) => setForm({ ...form, time_slot_interval: v })}>
+                    <SelectTrigger><SelectValue placeholder="Seleccionar intervalo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="15">Cada 15 minutos</SelectItem>
                       <SelectItem value="30">Cada 30 minutos</SelectItem>
@@ -296,9 +264,7 @@ export default function AdminSettings() {
                       <SelectItem value="60">Cada 1 hora</SelectItem>
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">
-                    Define cada cuánto tiempo se mostrarán las opciones de horario
-                  </p>
+                  <p className="text-xs text-muted-foreground">Define cada cuánto tiempo se mostrarán las opciones de horario</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -311,22 +277,17 @@ export default function AdminSettings() {
                       <label 
                         key={slot} 
                         className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
-                          form.manual_hours.includes(slot)
-                            ? 'bg-primary/10 border-primary'
-                            : 'border-border hover:bg-muted'
+                          form.manual_hours.includes(slot) ? 'bg-primary/10 border-primary' : 'border-border hover:bg-muted'
                         }`}
                       >
-                        <Checkbox
-                          checked={form.manual_hours.includes(slot)}
-                          onCheckedChange={() => toggleManualHour(slot)}
-                        />
-                        <span className="text-sm font-medium">{slot}</span>
+                        <Checkbox checked={form.manual_hours.includes(slot)} onCheckedChange={() => toggleManualHour(slot)} />
+                        <span className="text-sm font-medium">{formatTime12h(slot)}</span>
                       </label>
                     ))}
                   </div>
                   {form.manual_hours.length > 0 && (
                     <p className="text-xs text-primary font-medium">
-                      {form.manual_hours.length} hora(s) seleccionada(s): {form.manual_hours.join(', ')}
+                      {form.manual_hours.length} hora(s) seleccionada(s): {form.manual_hours.map(h => formatTime12h(h)).join(', ')}
                     </p>
                   )}
                 </div>
@@ -342,25 +303,13 @@ export default function AdminSettings() {
               <DollarSign className="w-5 h-5 text-primary" />
               Pagos y Reservas
             </CardTitle>
-            <CardDescription>
-              Configura el monto de reserva
-            </CardDescription>
+            <CardDescription>Configura el monto de reserva</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               <Label htmlFor="reservation">Monto de reserva ($)</Label>
-              <Input
-                id="reservation"
-                type="number"
-                min="0"
-                step="0.01"
-                value={form.reservation_amount}
-                onChange={(e) => setForm({ ...form, reservation_amount: e.target.value })}
-                placeholder="10.00"
-              />
-              <p className="text-xs text-muted-foreground">
-                Este es el monto mínimo que las clientas deben pagar para confirmar su cita
-              </p>
+              <Input id="reservation" type="number" min="0" step="0.01" value={form.reservation_amount} onChange={(e) => setForm({ ...form, reservation_amount: e.target.value })} placeholder="10.00" />
+              <p className="text-xs text-muted-foreground">Este es el monto mínimo que las clientas deben pagar para confirmar su cita</p>
             </div>
           </CardContent>
         </Card>
@@ -372,85 +321,83 @@ export default function AdminSettings() {
               <Sparkles className="w-5 h-5 text-primary" />
               Características Destacadas
             </CardTitle>
-            <CardDescription>
-              Edita o desactiva las características que aparecen en la página principal
-            </CardDescription>
+            <CardDescription>Edita o desactiva las características que aparecen en la página principal</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {featureTags.map((tag) => (
               <div key={tag.id} className="flex items-start gap-4 p-4 rounded-lg border border-border">
-                <Switch
-                  checked={tag.enabled}
-                  onCheckedChange={(checked) => updateFeatureTag(tag.id, { enabled: checked })}
-                />
+                <Switch checked={tag.enabled} onCheckedChange={(checked) => updateFeatureTag(tag.id, { enabled: checked })} />
                 <div className="flex-1 space-y-2">
-                  <Input
-                    value={tag.title}
-                    onChange={(e) => updateFeatureTag(tag.id, { title: e.target.value })}
-                    placeholder="Título"
-                    className="font-semibold"
-                  />
-                  <Textarea
-                    value={tag.description}
-                    onChange={(e) => updateFeatureTag(tag.id, { description: e.target.value })}
-                    placeholder="Descripción"
-                    rows={2}
-                  />
+                  <Input value={tag.title} onChange={(e) => updateFeatureTag(tag.id, { title: e.target.value })} placeholder="Título" className="font-semibold" />
+                  <Textarea value={tag.description} onChange={(e) => updateFeatureTag(tag.id, { description: e.target.value })} placeholder="Descripción" rows={2} />
                 </div>
               </div>
             ))}
           </CardContent>
         </Card>
 
-        {/* Colors */}
+        {/* Colors by Section */}
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Palette className="w-5 h-5 text-primary" />
-              Colores
+              Colores por Sección
             </CardTitle>
             <CardDescription>
-              Personaliza los colores de tu marca (próximamente)
+              Personaliza los colores de cada parte de tu página
             </CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Color primario</Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="color"
-                    value={form.primary_color}
-                    onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
-                    className="w-14 h-10 p-1"
-                  />
-                  <Input
-                    value={form.primary_color}
-                    onChange={(e) => setForm({ ...form, primary_color: e.target.value })}
-                    placeholder="#d4768f"
-                  />
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {(Object.keys(colorLabels) as Array<keyof SectionColors>).map((key) => (
+                <div key={key} className="space-y-2">
+                  <Label className="text-sm">{colorLabels[key]}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      value={sectionColors[key]}
+                      onChange={(e) => updateSectionColor(key, e.target.value)}
+                      className="w-14 h-10 p-1 cursor-pointer"
+                    />
+                    <Input
+                      value={sectionColors[key]}
+                      onChange={(e) => updateSectionColor(key, e.target.value)}
+                      placeholder="#000000"
+                      className="flex-1"
+                    />
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Color de acento</Label>
+              ))}
+            </div>
+
+            {/* Preview */}
+            <div className="mt-4 p-4 rounded-lg border border-border">
+              <p className="text-xs text-muted-foreground mb-2">Vista previa:</p>
+              <div className="p-4 rounded-lg" style={{ backgroundColor: sectionColors.background }}>
+                <h3 className="font-display text-lg font-bold mb-1" style={{ color: sectionColors.heading_color }}>
+                  Título de ejemplo
+                </h3>
+                <p className="text-sm mb-3" style={{ color: sectionColors.body_text }}>
+                  Este es un texto de párrafo de ejemplo para ver cómo se ven los colores.
+                </p>
                 <div className="flex gap-2">
-                  <Input
-                    type="color"
-                    value={form.accent_color}
-                    onChange={(e) => setForm({ ...form, accent_color: e.target.value })}
-                    className="w-14 h-10 p-1"
-                  />
-                  <Input
-                    value={form.accent_color}
-                    onChange={(e) => setForm({ ...form, accent_color: e.target.value })}
-                    placeholder="#d4a574"
-                  />
+                  <span className="px-3 py-1 rounded text-sm font-medium" style={{ backgroundColor: sectionColors.button_bg, color: sectionColors.button_text }}>
+                    Botón
+                  </span>
+                  <span className="px-3 py-1 rounded text-sm font-medium" style={{ backgroundColor: sectionColors.accent_bg, color: sectionColors.accent_text }}>
+                    Acento
+                  </span>
                 </div>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Los colores se aplicarán en una futura actualización
-            </p>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSectionColors(defaultSectionColors)}
+            >
+              Restaurar colores por defecto
+            </Button>
           </CardContent>
         </Card>
       </div>

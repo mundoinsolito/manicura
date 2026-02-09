@@ -69,7 +69,7 @@ const Index = () => {
 
             <div className="mt-4 animate-fade-up" style={{ animationDelay: '0.4s' }}>
               <Link to="/servicios">
-                <Button variant="link" className="text-muted-foreground hover:text-primary">
+                <Button variant="outline" className="bg-black/20 border-white/30 text-white hover:bg-black/30 hover:text-white backdrop-blur-sm">
                   Ver todos los servicios →
                 </Button>
               </Link>
