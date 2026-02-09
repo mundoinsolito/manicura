@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PublicLayout } from '@/components/PublicLayout';
 import { useServices } from '@/hooks/useServices';
@@ -17,6 +17,7 @@ import { format, addDays, isBefore, startOfToday, parseISO, isToday } from 'date
 import { es } from 'date-fns/locale';
 import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { formatTime12h } from '@/lib/utils';
 
 type Step = 'service' | 'datetime' | 'info' | 'confirm';
 
@@ -85,7 +86,6 @@ export default function BookingPage() {
       return bookedRanges.some(range => slotMinutes < range.end && slotEnd > range.start);
     };
 
-    // Determine base slots: custom day > manual global > interval
     let baseSlots: string[];
     const customHours = getScheduleForDate(dateStr);
 
@@ -112,7 +112,6 @@ export default function BookingPage() {
       const [h, m] = timeStr.split(':').map(Number);
       const slotMinutes = h * 60 + m;
 
-      // Past time check for today
       if (isToday(booking.date)) {
         const slotTime = new Date(booking.date);
         slotTime.setHours(h, m, 0, 0);
@@ -129,7 +128,6 @@ export default function BookingPage() {
 
   const timeSlots = getTimeSlots();
 
-  // Check if date is blocked (all day)
   const isDateBlocked = (date: Date) => {
     const dateStr = format(date, 'yyyy-MM-dd');
     const fullDayBlock = blockedTimes.find(bt => 
@@ -170,7 +168,7 @@ export default function BookingPage() {
       ? selectedService.price 
       : settings.reservation_amount;
 
-    const message = `Hola, soy ${booking.name}, mi cédula es ${booking.cedula}. Quiero confirmar mi cita para el día ${format(booking.date, 'dd/MM/yyyy', { locale: es })} a las ${booking.time}. Servicio: ${selectedService.name}. Monto a pagar: $${paymentAmount}. Adjunto mi comprobante de pago.`;
+    const message = `Hola, soy ${booking.name}, mi cédula es ${booking.cedula}. Quiero confirmar mi cita para el día ${format(booking.date, 'dd/MM/yyyy', { locale: es })} a las ${formatTime12h(booking.time)}. Servicio: ${selectedService.name}. Monto a pagar: $${paymentAmount}. Adjunto mi comprobante de pago.`;
 
     return encodeURIComponent(message);
   };
@@ -181,14 +179,12 @@ export default function BookingPage() {
     setSubmitting(true);
     
     try {
-      // First, find or create client
       let clientId = '';
       const existingClient = await findClientByPhone(booking.phone);
       
       if (existingClient) {
         clientId = existingClient.id;
       } else {
-        // Add new client
         const clientResult = await addClient({
           name: booking.name,
           phone: booking.phone,
@@ -208,7 +204,6 @@ export default function BookingPage() {
         }
       }
       
-      // Create the appointment with pending status
       const paymentAmount = booking.paymentType === 'full' 
         ? selectedService.price 
         : settings.reservation_amount;
@@ -228,14 +223,12 @@ export default function BookingPage() {
         throw new Error('Error al crear la cita');
       }
       
-    // Open WhatsApp
-    const phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
-    const message = getWhatsAppMessage();
-    window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
+      const phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
+      const message = getWhatsAppMessage();
+      window.open(`https://wa.me/${phoneNumber}?text=${message}`, '_blank');
       
       toast.success('¡Cita registrada! Envía tu comprobante para confirmar.');
       
-      // Redirect to home after a short delay
       setTimeout(() => {
         navigate('/');
       }, 1000);
@@ -294,23 +287,15 @@ export default function BookingPage() {
                   >
                     <CardContent className="p-4 flex items-center gap-4">
                       {service.image_url ? (
-                        <img 
-                          src={service.image_url} 
-                          alt={service.name}
-                          className="w-16 h-16 rounded-lg object-cover"
-                        />
+                        <img src={service.image_url} alt={service.name} className="w-16 h-16 rounded-lg object-cover" />
                       ) : (
-                        <div className="w-16 h-16 rounded-lg hero-gradient flex items-center justify-center text-2xl">
-                          💅
-                        </div>
+                        <div className="w-16 h-16 rounded-lg hero-gradient flex items-center justify-center text-2xl">💅</div>
                       )}
                       <div className="flex-1">
                         <h3 className="font-semibold text-foreground">{service.name}</h3>
                         <p className="text-sm text-muted-foreground">{service.duration} min</p>
                       </div>
-                      <div className="text-lg font-bold text-primary">
-                        ${service.price}
-                      </div>
+                      <div className="text-lg font-bold text-primary">${service.price}</div>
                     </CardContent>
                   </Card>
                 ))}
@@ -327,11 +312,7 @@ export default function BookingPage() {
           {/* Step 2: Date & Time */}
           {step === 'datetime' && (
             <div className="animate-fade-in">
-              <Button 
-                variant="ghost" 
-                onClick={() => setStep('service')} 
-                className="mb-4"
-              >
+              <Button variant="ghost" onClick={() => setStep('service')} className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Volver
               </Button>
@@ -382,7 +363,7 @@ export default function BookingPage() {
                               className={booking.time === time ? 'accent-gradient border-0' : ''}
                               onClick={() => handleTimeSelect(time)}
                             >
-                              {time}
+                              {formatTime12h(time)}
                             </Button>
                           ))}
                         </div>
@@ -405,11 +386,7 @@ export default function BookingPage() {
           {/* Step 3: Client Info */}
           {step === 'info' && (
             <div className="animate-fade-in">
-              <Button 
-                variant="ghost" 
-                onClick={() => setStep('datetime')} 
-                className="mb-4"
-              >
+              <Button variant="ghost" onClick={() => setStep('datetime')} className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Volver
               </Button>
@@ -425,67 +402,33 @@ export default function BookingPage() {
                       <Label htmlFor="name">Nombre completo</Label>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input 
-                          id="name"
-                          placeholder="Tu nombre"
-                          value={booking.name}
-                          onChange={(e) => setBooking({ ...booking, name: e.target.value })}
-                          className="pl-10"
-                          required
-                        />
+                        <Input id="name" placeholder="Tu nombre" value={booking.name} onChange={(e) => setBooking({ ...booking, name: e.target.value })} className="pl-10" required />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="phone">Teléfono</Label>
                       <div className="relative">
                         <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input 
-                          id="phone"
-                          placeholder="+58 412 000 0000"
-                          value={booking.phone}
-                          onChange={(e) => setBooking({ ...booking, phone: e.target.value })}
-                          className="pl-10"
-                          required
-                        />
+                        <Input id="phone" placeholder="+58 412 000 0000" value={booking.phone} onChange={(e) => setBooking({ ...booking, phone: e.target.value })} className="pl-10" required />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label htmlFor="cedula">Cédula</Label>
                       <div className="relative">
                         <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                        <Input 
-                          id="cedula"
-                          placeholder="V-12345678"
-                          value={booking.cedula}
-                          onChange={(e) => setBooking({ ...booking, cedula: e.target.value })}
-                          className="pl-10"
-                          required
-                        />
+                        <Input id="cedula" placeholder="V-12345678" value={booking.cedula} onChange={(e) => setBooking({ ...booking, cedula: e.target.value })} className="pl-10" required />
                       </div>
                     </div>
-
                     <div className="space-y-2">
                       <Label>Tipo de pago</Label>
-                      <Select 
-                        value={booking.paymentType} 
-                        onValueChange={(v) => setBooking({ ...booking, paymentType: v as 'partial' | 'full' })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
+                      <Select value={booking.paymentType} onValueChange={(v) => setBooking({ ...booking, paymentType: v as 'partial' | 'full' })}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="partial">
-                            Reserva (${settings.reservation_amount})
-                          </SelectItem>
-                          <SelectItem value="full">
-                            Pago completo (${selectedService?.price || 0})
-                          </SelectItem>
+                          <SelectItem value="partial">Reserva (${settings.reservation_amount})</SelectItem>
+                          <SelectItem value="full">Pago completo (${selectedService?.price || 0})</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
-
                     <Button type="submit" className="w-full accent-gradient border-0">
                       Continuar
                       <ArrowRight className="w-4 h-4 ml-2" />
@@ -499,11 +442,7 @@ export default function BookingPage() {
           {/* Step 4: Confirmation */}
           {step === 'confirm' && selectedService && booking.date && (
             <div className="animate-fade-in">
-              <Button 
-                variant="ghost" 
-                onClick={() => setStep('info')} 
-                className="mb-4"
-              >
+              <Button variant="ghost" onClick={() => setStep('info')} className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
                 Volver
               </Button>
@@ -526,7 +465,7 @@ export default function BookingPage() {
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
                     <span className="text-muted-foreground">Hora</span>
-                    <span className="font-semibold">{booking.time}</span>
+                    <span className="font-semibold">{formatTime12h(booking.time)}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
                     <span className="text-muted-foreground">Nombre</span>

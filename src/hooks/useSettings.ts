@@ -1,5 +1,18 @@
 import { useState, useEffect } from 'react';
-import { supabase, Settings } from '@/lib/supabase';
+import { supabase, Settings, SectionColors } from '@/lib/supabase';
+
+const defaultSectionColors: SectionColors = {
+  background: '#ffffff',
+  foreground: '#3d1a24',
+  card_bg: '#fdf5f7',
+  card_text: '#3d1a24',
+  heading_color: '#3d1a24',
+  body_text: '#7a5060',
+  button_bg: '#d4768f',
+  button_text: '#ffffff',
+  accent_bg: '#d4a574',
+  accent_text: '#3d1a24',
+};
 
 const defaultFeatureTags = [
   { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
@@ -21,10 +34,13 @@ const defaultSettings: Settings = {
   manual_hours: [],
   primary_color: '#d4768f',
   accent_color: '#d4a574',
+  section_colors: null,
   feature_tags: defaultFeatureTags,
   created_at: new Date().toISOString(),
   updated_at: new Date().toISOString(),
 };
+
+export { defaultSectionColors };
 
 export function useSettings() {
   const [settings, setSettings] = useState<Settings>(defaultSettings);
@@ -50,6 +66,7 @@ export function useSettings() {
           ...data,
           schedule_mode: data.schedule_mode || 'interval',
           manual_hours: data.manual_hours || [],
+          section_colors: data.section_colors || null,
         });
       }
     } catch (error) {
@@ -78,6 +95,7 @@ export function useSettings() {
         ...data,
         schedule_mode: data.schedule_mode || 'interval',
         manual_hours: data.manual_hours || [],
+        section_colors: data.section_colors || null,
       });
       return { success: true };
     } catch (error) {

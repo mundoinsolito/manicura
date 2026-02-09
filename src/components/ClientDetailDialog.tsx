@@ -1,9 +1,11 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Client, Appointment } from '@/lib/supabase';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { AlertTriangle, Heart, Phone, CreditCard } from 'lucide-react';
+import { AlertTriangle, Heart, Phone, CreditCard, MessageCircle } from 'lucide-react';
+import { formatTime12h, openWhatsApp } from '@/lib/utils';
 
 interface ClientDetailDialogProps {
   client: Client | null;
@@ -48,6 +50,18 @@ export function ClientDetailDialog({ client, open, onOpenChange, appointments }:
               </div>
             </div>
           </div>
+
+          {client.phone && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full text-green-600 border-green-200 hover:bg-green-50"
+              onClick={() => openWhatsApp(client.phone)}
+            >
+              <MessageCircle className="w-4 h-4 mr-2" />
+              Contactar por WhatsApp
+            </Button>
+          )}
 
           {client.email && (
             <div className="text-sm">
@@ -101,6 +115,7 @@ export function ClientDetailDialog({ client, open, onOpenChange, appointments }:
               {clientAppointments.slice(0, 10).map((apt) => (
                 <div key={apt.id} className="flex items-center justify-between text-sm p-2 bg-muted rounded">
                   <span>{format(parseISO(apt.date), 'dd/MM/yyyy', { locale: es })}</span>
+                  <span>{formatTime12h(apt.time)}</span>
                   <span>{apt.service?.name}</span>
                   <Badge variant="outline">{apt.status}</Badge>
                 </div>
