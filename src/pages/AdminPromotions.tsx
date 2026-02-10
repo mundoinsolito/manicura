@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { AdminLayout } from '@/components/AdminLayout';
 import { usePromotions } from '@/hooks/usePromotions';
+import { useServices } from '@/hooks/useServices';
 import { ImageUpload } from '@/components/ImageUpload';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Plus, Pencil, Trash2, Calendar, Percent, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
@@ -18,6 +20,8 @@ import { es } from 'date-fns/locale';
 
 export default function AdminPromotions() {
   const { promotions, loading, addPromotion, updatePromotion, deletePromotion } = usePromotions();
+  const { services } = useServices();
+  const activeServices = services.filter(s => s.is_active);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPromotion, setEditingPromotion] = useState<Promotion | null>(null);
 
@@ -25,6 +29,7 @@ export default function AdminPromotions() {
     title: '',
     description: '',
     image_url: '',
+    service_id: '',
     discount_percent: '',
     discount_amount: '',
     valid_from: format(new Date(), 'yyyy-MM-dd'),
@@ -37,6 +42,7 @@ export default function AdminPromotions() {
       title: '',
       description: '',
       image_url: '',
+      service_id: '',
       discount_percent: '',
       discount_amount: '',
       valid_from: format(new Date(), 'yyyy-MM-dd'),
@@ -52,6 +58,7 @@ export default function AdminPromotions() {
       title: promo.title,
       description: promo.description,
       image_url: promo.image_url || '',
+      service_id: promo.service_id || '',
       discount_percent: promo.discount_percent?.toString() || '',
       discount_amount: promo.discount_amount?.toString() || '',
       valid_from: promo.valid_from,
@@ -64,10 +71,13 @@ export default function AdminPromotions() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    const selectedService = activeServices.find(s => s.id === form.service_id);
     const promoData = {
       title: form.title,
       description: form.description,
       image_url: form.image_url || null,
+      service_id: form.service_id || null,
+      original_price: selectedService ? selectedService.price : null,
       discount_percent: form.discount_percent ? parseFloat(form.discount_percent) : null,
       discount_amount: form.discount_amount ? parseFloat(form.discount_amount) : null,
       valid_from: form.valid_from,
@@ -167,6 +177,25 @@ export default function AdminPromotions() {
                     placeholder="Describe la promoción..."
                     rows={3}
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Servicio vinculado</Label>
+                  <Select
+                    value={form.service_id}
+                    onValueChange={(value) => setForm({ ...form, service_id: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar servicio (opcional)" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {activeServices.map((service) => (
+                        <SelectItem key={service.id} value={service.id}>
+                          {service.name} - ${service.price}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -274,6 +303,21 @@ export default function AdminPromotions() {
                       <p className="text-sm text-muted-foreground line-clamp-2">
                         {promo.description}
                       </p>
+                      {promo.original_price != null && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Precio original: <span className="line-through">${promo.original_price}</span>
+                          {promo.discount_percent && (
+                            <span className="text-primary font-semibold ml-2">
+                              → ${(promo.original_price * (1 - promo.discount_percent / 100)).toFixed(2)}
+                            </span>
+                          )}
+                          {promo.discount_amount && !promo.discount_percent && (
+                            <span className="text-primary font-semibold ml-2">
+                              → ${(promo.original_price - promo.discount_amount).toFixed(2)}
+                            </span>
+                          )}
+                        </p>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <Button 

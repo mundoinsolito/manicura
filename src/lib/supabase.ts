@@ -109,12 +109,15 @@ export type Promotion = {
   title: string;
   description: string;
   image_url: string | null;
+  service_id: string | null;
+  original_price: number | null;
   discount_percent: number | null;
   discount_amount: number | null;
   valid_from: string;
   valid_until: string;
   is_active: boolean;
   created_at: string;
+  service?: Service;
 };
 
 export type CustomSchedule = {
