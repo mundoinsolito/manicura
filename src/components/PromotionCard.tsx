@@ -2,14 +2,25 @@ import { Promotion } from '@/lib/supabase';
 import { Calendar, Percent, DollarSign } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
+import { Link } from 'react-router-dom';
 
 interface PromotionCardProps {
   promotion: Promotion;
 }
 
 export function PromotionCard({ promotion }: PromotionCardProps) {
+  const originalPrice = promotion.original_price;
+  const promoPrice = originalPrice
+    ? promotion.discount_percent
+      ? originalPrice * (1 - promotion.discount_percent / 100)
+      : promotion.discount_amount
+        ? originalPrice - promotion.discount_amount
+        : null
+    : null;
+
   return (
     <Card className="overflow-hidden border-0 shadow-card gold-gradient animate-fade-in">
       <div className="flex flex-col md:flex-row">
@@ -49,9 +60,23 @@ export function PromotionCard({ promotion }: PromotionCardProps) {
             {promotion.title}
           </h3>
           
-          <p className="text-muted-foreground text-sm">
+          <p className="text-muted-foreground text-sm mb-4">
             {promotion.description}
           </p>
+
+          {originalPrice != null && promoPrice != null && (
+            <div className="flex items-center gap-3 mb-4">
+              <span className="text-muted-foreground line-through text-sm">${originalPrice.toFixed(2)}</span>
+              <span className="text-primary font-bold text-lg">${promoPrice.toFixed(2)}</span>
+            </div>
+          )}
+
+          <Link to={`/reservar${promotion.service_id ? `?service=${promotion.service_id}` : ''}`}>
+            <Button className="w-full accent-gradient border-0 shadow-soft">
+              <Calendar className="w-4 h-4 mr-2" />
+              Reservar
+            </Button>
+          </Link>
         </CardContent>
       </div>
     </Card>
