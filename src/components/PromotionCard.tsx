@@ -71,7 +71,7 @@ export function PromotionCard({ promotion }: PromotionCardProps) {
             </div>
           )}
 
-          <Link to={`/reservar${promotion.service_id ? `?service=${promotion.service_id}` : ''}`}>
+          <Link to="/reservar">
             <Button className="w-full accent-gradient border-0 shadow-soft">
               <Calendar className="w-4 h-4 mr-2" />
               Reservar
