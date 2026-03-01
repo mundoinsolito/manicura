@@ -13,16 +13,17 @@ import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format, addDays, isBefore, startOfToday, parseISO, isToday } from 'date-fns';
+import { Checkbox } from '@/components/ui/checkbox';
+import { format, addDays, isBefore, startOfToday, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatTime12h } from '@/lib/utils';
 
 type Step = 'service' | 'datetime' | 'info' | 'confirm';
 
 interface BookingData {
-  serviceId: string;
+  serviceIds: string[];
   date: Date | undefined;
   time: string;
   name: string;
@@ -35,16 +36,18 @@ export default function BookingPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { services } = useServices();
-  const { settings } = useSettings();
+  const { settings, loading: settingsLoading } = useSettings();
   const { appointments, addAppointment } = useAppointments();
   const { isTimeBlocked, blockedTimes } = useBlockedTimes();
   const { getScheduleForDate } = useCustomSchedules();
-  const { findClientByPhone, addClient } = useClients();
+  const { findClientByCedula, addClient, updateClient } = useClients();
 
   const [step, setStep] = useState<Step>('service');
   const [submitting, setSubmitting] = useState(false);
+  
+  const initialService = searchParams.get('service');
   const [booking, setBooking] = useState<BookingData>({
-    serviceId: searchParams.get('service') || '',
+    serviceIds: initialService ? [initialService] : [],
     date: undefined,
     time: '',
     name: '',
@@ -54,9 +57,28 @@ export default function BookingPage() {
   });
 
   const activeServices = services.filter(s => s.is_active);
-  const selectedService = services.find(s => s.id === booking.serviceId);
+  const selectedServices = services.filter(s => booking.serviceIds.includes(s.id));
+  const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
+  const totalDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
 
-  // Generate time slots
+  const toggleService = (serviceId: string) => {
+    setBooking(prev => ({
+      ...prev,
+      serviceIds: prev.serviceIds.includes(serviceId)
+        ? prev.serviceIds.filter(id => id !== serviceId)
+        : [...prev.serviceIds, serviceId],
+    }));
+  };
+
+  const handleContinueToDateTime = () => {
+    if (booking.serviceIds.length === 0) {
+      toast.error('Selecciona al menos un servicio');
+      return;
+    }
+    setStep('datetime');
+  };
+
+  // Generate time slots based on total duration of selected services
   const getTimeSlots = () => {
     if (!booking.date) return [];
 
@@ -79,7 +101,7 @@ export default function BookingPage() {
         return { start: startMinutes, end: startMinutes + duration };
       });
 
-    const serviceDuration = selectedService?.duration || 30;
+    const serviceDuration = totalDuration || 30;
 
     const isSlotConflicting = (slotMinutes: number) => {
       const slotEnd = slotMinutes + serviceDuration;
@@ -112,8 +134,8 @@ export default function BookingPage() {
       const [h, m] = timeStr.split(':').map(Number);
       const slotMinutes = h * 60 + m;
 
-      if (isToday(booking.date)) {
-        const slotTime = new Date(booking.date);
+      if (isToday(booking.date!)) {
+        const slotTime = new Date(booking.date!);
         slotTime.setHours(h, m, 0, 0);
         if (isBefore(slotTime, now)) return false;
       }
@@ -138,11 +160,6 @@ export default function BookingPage() {
     return !!fullDayBlock;
   };
 
-  const handleServiceSelect = (serviceId: string) => {
-    setBooking({ ...booking, serviceId });
-    setStep('datetime');
-  };
-
   const handleDateSelect = (date: Date | undefined) => {
     setBooking({ ...booking, date, time: '' });
   };
@@ -162,28 +179,34 @@ export default function BookingPage() {
   };
 
   const getWhatsAppMessage = () => {
-    if (!selectedService || !booking.date) return '';
+    if (selectedServices.length === 0 || !booking.date) return '';
     
+    const serviceNames = selectedServices.map(s => s.name).join(', ');
     const paymentAmount = booking.paymentType === 'full' 
-      ? selectedService.price 
+      ? totalPrice 
       : settings.reservation_amount;
 
-    const message = `Hola, soy ${booking.name}, mi cédula es ${booking.cedula}. Quiero confirmar mi cita para el día ${format(booking.date, 'dd/MM/yyyy', { locale: es })} a las ${formatTime12h(booking.time)}. Servicio: ${selectedService.name}. Monto a pagar: $${paymentAmount}. Adjunto mi comprobante de pago.`;
+    const message = `Hola, soy ${booking.name}, mi cédula es ${booking.cedula}. Quiero confirmar mi cita para el día ${format(booking.date, 'dd/MM/yyyy', { locale: es })} a las ${formatTime12h(booking.time)}. Servicios: ${serviceNames}. Total: $${totalPrice}. Monto a pagar: $${paymentAmount}. Adjunto mi comprobante de pago.`;
 
     return encodeURIComponent(message);
   };
 
   const handleWhatsAppClick = async () => {
-    if (!selectedService || !booking.date) return;
+    if (selectedServices.length === 0 || !booking.date) return;
     
     setSubmitting(true);
     
     try {
+      // Find or create client by cedula
       let clientId = '';
-      const existingClient = await findClientByPhone(booking.phone);
+      const existingClient = await findClientByCedula(booking.cedula);
       
       if (existingClient) {
         clientId = existingClient.id;
+        // Update name/phone if changed
+        if (existingClient.name !== booking.name || existingClient.phone !== booking.phone) {
+          await updateClient(existingClient.id, { name: booking.name, phone: booking.phone });
+        }
       } else {
         const clientResult = await addClient({
           name: booking.name,
@@ -205,22 +228,26 @@ export default function BookingPage() {
       }
       
       const paymentAmount = booking.paymentType === 'full' 
-        ? selectedService.price 
+        ? totalPrice 
         : settings.reservation_amount;
       
-      const appointmentResult = await addAppointment({
-        client_id: clientId,
-        service_id: booking.serviceId,
-        date: format(booking.date, 'yyyy-MM-dd'),
-        time: booking.time,
-        status: 'pending',
-        payment_status: 'pending',
-        payment_amount: paymentAmount,
-        notes: `Cédula: ${booking.cedula}`,
-      });
-      
-      if (!appointmentResult.success) {
-        throw new Error('Error al crear la cita');
+      // Create one appointment per service
+      for (const serviceId of booking.serviceIds) {
+        const service = services.find(s => s.id === serviceId);
+        const appointmentResult = await addAppointment({
+          client_id: clientId,
+          service_id: serviceId,
+          date: format(booking.date, 'yyyy-MM-dd'),
+          time: booking.time,
+          status: 'pending',
+          payment_status: 'pending',
+          payment_amount: booking.serviceIds.length === 1 ? paymentAmount : (service?.price || 0),
+          notes: `Cédula: ${booking.cedula}${booking.serviceIds.length > 1 ? ' | Reserva múltiple' : ''}`,
+        });
+        
+        if (!appointmentResult.success) {
+          throw new Error('Error al crear la cita');
+        }
       }
       
       const phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
@@ -269,41 +296,73 @@ export default function BookingPage() {
             ))}
           </div>
 
-          {/* Step 1: Service Selection */}
+          {/* Step 1: Service Selection (multi-select) */}
           {step === 'service' && (
             <div className="animate-fade-in">
-              <h1 className="font-display text-3xl font-bold text-center mb-8">
-                Selecciona tu servicio
+              <h1 className="font-display text-3xl font-bold text-center mb-2">
+                Selecciona tus servicios
               </h1>
+              <p className="text-center text-muted-foreground mb-8">
+                Puedes elegir uno o varios servicios
+              </p>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeServices.map((service) => (
-                  <Card 
-                    key={service.id}
-                    className={`cursor-pointer transition-all hover:shadow-elevated ${
-                      booking.serviceId === service.id ? 'ring-2 ring-primary' : ''
-                    }`}
-                    onClick={() => handleServiceSelect(service.id)}
-                  >
-                    <CardContent className="p-4 flex items-center gap-4">
-                      {service.image_url ? (
-                        <img src={service.image_url} alt={service.name} className="w-16 h-16 rounded-lg object-cover" />
-                      ) : (
-                        <div className="w-16 h-16 rounded-lg hero-gradient flex items-center justify-center text-2xl">💅</div>
-                      )}
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-foreground">{service.name}</h3>
-                        <p className="text-sm text-muted-foreground">{service.duration} min</p>
-                      </div>
-                      <div className="text-lg font-bold text-primary">${service.price}</div>
-                    </CardContent>
-                  </Card>
-                ))}
+                {activeServices.map((service) => {
+                  const isSelected = booking.serviceIds.includes(service.id);
+                  return (
+                    <Card 
+                      key={service.id}
+                      className={`cursor-pointer transition-all hover:shadow-elevated ${
+                        isSelected ? 'ring-2 ring-primary' : ''
+                      }`}
+                      onClick={() => toggleService(service.id)}
+                    >
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <Checkbox checked={isSelected} className="pointer-events-none" />
+                        {service.image_url ? (
+                          <img src={service.image_url} alt={service.name} className="w-16 h-16 rounded-lg object-cover" />
+                        ) : (
+                          <div className="w-16 h-16 rounded-lg hero-gradient flex items-center justify-center text-2xl">💅</div>
+                        )}
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-foreground">{service.name}</h3>
+                          <p className="text-sm text-muted-foreground">{service.duration} min</p>
+                        </div>
+                        <div className="text-lg font-bold text-primary">${service.price}</div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
               {activeServices.length === 0 && (
                 <div className="text-center py-12">
                   <p className="text-muted-foreground">No hay servicios disponibles en este momento</p>
+                </div>
+              )}
+
+              {/* Summary bar */}
+              {booking.serviceIds.length > 0 && (
+                <div className="mt-6 p-4 rounded-xl bg-card border shadow-soft">
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {selectedServices.map(s => (
+                      <span key={s.id} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                        {s.name}
+                        <button onClick={(e) => { e.stopPropagation(); toggleService(s.id); }}>
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm text-muted-foreground">
+                      {selectedServices.length} servicio{selectedServices.length > 1 ? 's' : ''} · {totalDuration} min · <span className="font-semibold text-foreground">${totalPrice}</span>
+                    </div>
+                    <Button onClick={handleContinueToDateTime} className="accent-gradient border-0">
+                      Continuar
+                      <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -425,7 +484,7 @@ export default function BookingPage() {
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="partial">Reserva (${settings.reservation_amount})</SelectItem>
-                          <SelectItem value="full">Pago completo (${selectedService?.price || 0})</SelectItem>
+                          <SelectItem value="full">Pago completo (${totalPrice})</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -440,7 +499,7 @@ export default function BookingPage() {
           )}
 
           {/* Step 4: Confirmation */}
-          {step === 'confirm' && selectedService && booking.date && (
+          {step === 'confirm' && selectedServices.length > 0 && booking.date && (
             <div className="animate-fade-in">
               <Button variant="ghost" onClick={() => setStep('info')} className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -453,9 +512,20 @@ export default function BookingPage() {
 
               <Card className="max-w-md mx-auto mb-6">
                 <CardContent className="pt-6 space-y-4">
+                  <div className="py-2 border-b border-border">
+                    <span className="text-muted-foreground text-sm">Servicios</span>
+                    <div className="mt-1 space-y-1">
+                      {selectedServices.map(s => (
+                        <div key={s.id} className="flex justify-between">
+                          <span className="font-medium">{s.name}</span>
+                          <span className="text-muted-foreground">${s.price}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
-                    <span className="text-muted-foreground">Servicio</span>
-                    <span className="font-semibold">{selectedService.name}</span>
+                    <span className="text-muted-foreground">Duración total</span>
+                    <span className="font-semibold">{totalDuration} min</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
                     <span className="text-muted-foreground">Fecha</span>
@@ -472,9 +542,13 @@ export default function BookingPage() {
                     <span className="font-semibold">{booking.name}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
+                    <span className="text-muted-foreground">Total servicios</span>
+                    <span className="font-bold text-lg">${totalPrice}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
                     <span className="text-muted-foreground">Monto a pagar</span>
                     <span className="font-semibold text-primary text-xl">
-                      ${booking.paymentType === 'full' ? selectedService.price : settings.reservation_amount}
+                      ${booking.paymentType === 'full' ? totalPrice : settings.reservation_amount}
                     </span>
                   </div>
                 </CardContent>
