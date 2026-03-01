@@ -89,6 +89,17 @@ export function useClients() {
     return data;
   }
 
+  async function findClientByCedula(cedula: string): Promise<Client | null> {
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('cedula', cedula)
+      .single();
+
+    if (error) return null;
+    return data;
+  }
+
   return { 
     clients, 
     loading, 
@@ -96,6 +107,7 @@ export function useClients() {
     updateClient, 
     deleteClient, 
     findClientByPhone,
+    findClientByCedula,
     refetch: fetchClients 
   };
 }

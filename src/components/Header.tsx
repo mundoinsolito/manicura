@@ -4,14 +4,16 @@ import { Calendar, Settings as SettingsIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function Header() {
-  const { settings } = useSettings();
+  const { settings, loading } = useSettings();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-effect border-b border-border/50">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            {settings.logo_url ? (
+            {loading ? (
+              <div className="w-10 h-10 rounded-full bg-muted animate-pulse" />
+            ) : settings.logo_url ? (
               <img 
                 src={settings.logo_url} 
                 alt={settings.business_name}
@@ -22,9 +24,13 @@ export function Header() {
                 <span className="text-primary-foreground font-display text-lg">✨</span>
               </div>
             )}
-            <h1 className="font-display text-xl font-semibold text-foreground">
-              {settings.business_name}
-            </h1>
+            {loading ? (
+              <div className="w-32 h-6 rounded bg-muted animate-pulse" />
+            ) : settings.business_name ? (
+              <h1 className="font-display text-xl font-semibold text-foreground">
+                {settings.business_name}
+              </h1>
+            ) : null}
           </Link>
           
           <nav className="flex items-center gap-4">

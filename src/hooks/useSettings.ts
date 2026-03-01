@@ -22,7 +22,7 @@ const defaultFeatureTags = [
 
 const defaultSettings: Settings = {
   id: '1',
-  business_name: 'Nails Clara',
+  business_name: '',
   logo_url: null,
   cover_image_url: null,
   whatsapp_number: '+58412000000',

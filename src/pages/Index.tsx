@@ -13,7 +13,7 @@ const featureIcons = [Star, Heart, Calendar];
 
 const Index = () => {
   const { services, loading: servicesLoading } = useServices();
-  const { settings } = useSettings();
+  const { settings, loading: settingsLoading } = useSettings();
   const { activePromotions } = usePromotions();
 
   const activeServices = services.filter(s => s.is_active);
@@ -24,8 +24,10 @@ const Index = () => {
     <PublicLayout>
       {/* Hero Section */}
       <section className="relative min-h-[80vh] flex items-center overflow-hidden">
-        {/* Background Image */}
-        {settings.cover_image_url ? (
+        {/* Background */}
+        {settingsLoading ? (
+          <div className="absolute inset-0 bg-muted animate-pulse" />
+        ) : settings.cover_image_url ? (
           <div 
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
             style={{ backgroundImage: `url(${settings.cover_image_url})` }}
@@ -48,9 +50,13 @@ const Index = () => {
               <span className="text-sm text-white/80">Belleza profesional para tus uñas</span>
             </div>
             
-            <h1 className="font-display text-5xl md:text-7xl font-bold text-white mb-6 animate-fade-up drop-shadow-lg" style={{ animationDelay: '0.1s' }}>
-              {settings.business_name}
-            </h1>
+            {settingsLoading ? (
+              <div className="w-64 h-16 mx-auto rounded bg-white/20 animate-pulse mb-6" />
+            ) : settings.business_name ? (
+              <h1 className="font-display text-5xl md:text-7xl font-bold text-white mb-6 animate-fade-up drop-shadow-lg" style={{ animationDelay: '0.1s' }}>
+                {settings.business_name}
+              </h1>
+            ) : null}
             
             <p className="text-lg md:text-xl text-white/90 mb-10 animate-fade-up drop-shadow-md" style={{ animationDelay: '0.2s' }}>
               Déjate consentir con nuestros servicios de manicura profesional. 
@@ -77,7 +83,6 @@ const Index = () => {
           </div>
         </div>
         
-        {/* Decorative elements */}
         <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent" />
       </section>
 
