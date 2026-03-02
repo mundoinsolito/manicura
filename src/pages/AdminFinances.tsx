@@ -41,7 +41,7 @@ export default function AdminFinances() {
     date: format(new Date(), 'yyyy-MM-dd'),
   });
 
-  // Build a map of appointment_id -> client name
+  // Build appointment client map
   const appointmentClientMap = useMemo(() => {
     const map: Record<string, string> = {};
     appointments.forEach(a => {
@@ -52,26 +52,58 @@ export default function AdminFinances() {
     return map;
   }, [appointments]);
 
-  // Filtered transactions
+  // Combine: manual transactions + auto-generated from appointments with payments
+  const allTransactions = useMemo(() => {
+    // Start with existing manual/recorded transactions
+    const txIds = new Set(transactions.map(t => t.id));
+    
+    // Also generate "virtual" entries from appointments that have payments but no transaction
+    const appointmentTxIds = new Set(
+      transactions.filter(t => t.appointment_id).map(t => t.appointment_id)
+    );
+
+    const virtualTx = appointments
+      .filter(a => 
+        (a.payment_status === 'partial' || a.payment_status === 'full') &&
+        a.payment_amount > 0 &&
+        !appointmentTxIds.has(a.id)
+      )
+      .map(a => ({
+        id: `apt-${a.id}`,
+        type: 'income' as const,
+        amount: a.payment_amount,
+        description: `Pago de cita - ${a.client?.name || 'Cliente'} - ${a.service?.name || 'Servicio'}`,
+        appointment_id: a.id,
+        date: a.date,
+        created_at: a.created_at,
+        _isVirtual: true,
+        _clientName: a.client?.name || '',
+      }));
+
+    const combined = [
+      ...transactions.map(t => ({ ...t, _isVirtual: false, _clientName: t.appointment_id ? (appointmentClientMap[t.appointment_id] || '') : '' })),
+      ...virtualTx,
+    ].sort((a, b) => b.date.localeCompare(a.date));
+
+    return combined;
+  }, [transactions, appointments, appointmentClientMap]);
+
+  // Filtered
   const filteredTransactions = useMemo(() => {
     const now = new Date();
     const todayStr = format(now, 'yyyy-MM-dd');
 
-    return transactions.filter(tx => {
-      // Type filter
+    return allTransactions.filter(tx => {
       if (typeFilter !== 'all' && tx.type !== typeFilter) return false;
 
-      // Search filter
       if (searchQuery) {
         const q = searchQuery.toLowerCase();
-        const clientName = tx.appointment_id ? appointmentClientMap[tx.appointment_id] || '' : '';
         const matchesSearch = 
           tx.description.toLowerCase().includes(q) ||
-          clientName.toLowerCase().includes(q);
+          tx._clientName.toLowerCase().includes(q);
         if (!matchesSearch) return false;
       }
 
-      // Date filter
       if (dateFilter === 'today') {
         if (tx.date !== todayStr) return false;
       } else if (dateFilter === 'week') {
@@ -87,20 +119,14 @@ export default function AdminFinances() {
 
       return true;
     });
-  }, [transactions, searchQuery, dateFilter, typeFilter, customFrom, customTo, appointmentClientMap]);
+  }, [allTransactions, searchQuery, dateFilter, typeFilter, customFrom, customTo]);
 
-  // Metrics from filtered transactions
   const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const netProfit = totalIncome - totalExpenses;
 
-  const appointmentIncome = appointments
-    .filter(a => a.payment_status === 'full' || a.payment_status === 'partial')
-    .reduce((sum, a) => sum + a.payment_amount, 0);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const result = await addTransaction({
       type: form.type,
       amount: parseFloat(form.amount),
@@ -108,7 +134,6 @@ export default function AdminFinances() {
       date: form.date,
       appointment_id: null,
     });
-
     if (result.success) {
       toast.success('Transacción registrada');
       setDialogOpen(false);
@@ -119,6 +144,10 @@ export default function AdminFinances() {
   };
 
   const handleDelete = async (id: string) => {
+    if (id.startsWith('apt-')) {
+      toast.error('Esta transacción se genera automáticamente desde la cita');
+      return;
+    }
     if (!confirm('¿Eliminar esta transacción?')) return;
     const result = await deleteTransaction(id);
     if (result.success) toast.success('Transacción eliminada');
@@ -178,7 +207,7 @@ export default function AdminFinances() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center justify-between mb-2">
@@ -186,15 +215,6 @@ export default function AdminFinances() {
                 <TrendingUp className="w-5 h-5 text-green-500" />
               </div>
               <p className="text-2xl sm:text-3xl font-bold text-green-600">${totalIncome.toFixed(2)}</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-muted-foreground">Pagos de Citas</span>
-                <DollarSign className="w-5 h-5 text-blue-500" />
-              </div>
-              <p className="text-2xl sm:text-3xl font-bold text-blue-600">${appointmentIncome.toFixed(2)}</p>
             </CardContent>
           </Card>
           <Card>
@@ -225,12 +245,7 @@ export default function AdminFinances() {
             <div className="flex flex-col sm:flex-row gap-4">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder="Buscar por descripción o cliente..." 
-                  value={searchQuery} 
-                  onChange={(e) => setSearchQuery(e.target.value)} 
-                  className="pl-10" 
-                />
+                <Input placeholder="Buscar por descripción o cliente..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-10" />
               </div>
               <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as TypeFilter)}>
                 <SelectTrigger className="w-full sm:w-[160px]">
@@ -299,42 +314,46 @@ export default function AdminFinances() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.map((tx) => {
-                    const clientName = tx.appointment_id ? appointmentClientMap[tx.appointment_id] || '—' : '—';
-                    return (
-                      <TableRow key={tx.id}>
-                        <TableCell className="text-sm whitespace-nowrap">
-                          <div>{format(parseISO(tx.date), 'dd/MM/yyyy', { locale: es })}</div>
-                          <div className="text-xs text-muted-foreground">{format(parseISO(tx.date), 'EEEE', { locale: es })}</div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={
-                            tx.type === 'income' 
-                              ? 'bg-green-50 text-green-700 border-green-200' 
-                              : 'bg-red-50 text-red-700 border-red-200'
-                          }>
-                            {tx.type === 'income' ? (
-                              <><ArrowUpCircle className="w-3 h-3 mr-1" /> Ingreso</>
-                            ) : (
-                              <><ArrowDownCircle className="w-3 h-3 mr-1" /> Gasto</>
-                            )}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-sm max-w-[200px] truncate">{tx.description}</TableCell>
-                        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{clientName}</TableCell>
-                        <TableCell className={`text-right font-semibold ${
-                          tx.type === 'income' ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {tx.type === 'income' ? '+' : '-'}${tx.amount.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right">
+                  {filteredTransactions.map((tx) => (
+                    <TableRow key={tx.id}>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        <div>{format(parseISO(tx.date), 'dd/MM/yyyy', { locale: es })}</div>
+                        <div className="text-xs text-muted-foreground">{format(parseISO(tx.date), 'EEEE', { locale: es })}</div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={
+                          tx.type === 'income' 
+                            ? 'bg-green-50 text-green-700 border-green-200' 
+                            : 'bg-red-50 text-red-700 border-red-200'
+                        }>
+                          {tx.type === 'income' ? (
+                            <><ArrowUpCircle className="w-3 h-3 mr-1" /> Ingreso</>
+                          ) : (
+                            <><ArrowDownCircle className="w-3 h-3 mr-1" /> Gasto</>
+                          )}
+                        </Badge>
+                        {tx._isVirtual && (
+                          <Badge variant="outline" className="ml-1 text-xs">Auto</Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[200px] truncate">{tx.description}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">{tx._clientName || '—'}</TableCell>
+                      <TableCell className={`text-right font-semibold ${
+                        tx.type === 'income' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {tx.type === 'income' ? '+' : '-'}${tx.amount.toFixed(2)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {!tx._isVirtual ? (
                           <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDelete(tx.id)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Cita</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             )}

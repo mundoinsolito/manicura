@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { PublicLayout } from '@/components/PublicLayout';
 import { useServices } from '@/hooks/useServices';
+import { usePromotions } from '@/hooks/usePromotions';
 import { useSettings } from '@/hooks/useSettings';
 import { useAppointments } from '@/hooks/useAppointments';
 import { useBlockedTimes } from '@/hooks/useBlockedTimes';
@@ -14,16 +15,28 @@ import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 import { format, addDays, isBefore, startOfToday, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight, Loader2, X } from 'lucide-react';
+import { Calendar as CalendarIcon, Clock, User, Phone, CreditCard, MessageCircle, Check, ArrowLeft, ArrowRight, Loader2, X, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatTime12h } from '@/lib/utils';
 
 type Step = 'service' | 'datetime' | 'info' | 'confirm';
 
+// A unified selectable item (service or promotion)
+interface BookingItem {
+  id: string;
+  type: 'service' | 'promotion';
+  name: string;
+  price: number;
+  duration: number;
+  image_url: string | null;
+  originalPrice?: number | null;
+}
+
 interface BookingData {
-  serviceIds: string[];
+  items: BookingItem[];
   date: Date | undefined;
   time: string;
   name: string;
@@ -36,6 +49,7 @@ export default function BookingPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { services } = useServices();
+  const { activePromotions } = usePromotions();
   const { settings, loading: settingsLoading } = useSettings();
   const { appointments, addAppointment } = useAppointments();
   const { isTimeBlocked, blockedTimes } = useBlockedTimes();
@@ -44,41 +58,90 @@ export default function BookingPage() {
 
   const [step, setStep] = useState<Step>('service');
   const [submitting, setSubmitting] = useState(false);
+
+  // Build selectable items
+  const activeServices = services.filter(s => s.is_active);
   
-  const initialService = searchParams.get('service');
-  const [booking, setBooking] = useState<BookingData>({
-    serviceIds: initialService ? [initialService] : [],
+  const serviceItems: BookingItem[] = activeServices.map(s => ({
+    id: `service-${s.id}`,
+    type: 'service',
+    name: s.name,
+    price: s.price,
+    duration: s.duration,
+    image_url: s.image_url,
+  }));
+
+  const promotionItems: BookingItem[] = activePromotions.map(p => {
+    const promoPrice = p.original_price
+      ? p.discount_percent
+        ? p.original_price * (1 - p.discount_percent / 100)
+        : p.discount_amount
+          ? p.original_price - p.discount_amount
+          : p.original_price
+      : 0;
+    return {
+      id: `promotion-${p.id}`,
+      type: 'promotion',
+      name: p.title,
+      price: Math.round(promoPrice * 100) / 100,
+      duration: 60, // Default duration for promotions
+      image_url: p.image_url,
+      originalPrice: p.original_price,
+    };
+  });
+
+  // Pre-select promotion from URL
+  const initialPromotionId = searchParams.get('promotion');
+  const initialServiceId = searchParams.get('service');
+  
+  const getInitialItems = (): BookingItem[] => {
+    if (initialPromotionId) {
+      const item = promotionItems.find(p => p.id === `promotion-${initialPromotionId}`);
+      return item ? [item] : [];
+    }
+    if (initialServiceId) {
+      const item = serviceItems.find(s => s.id === `service-${initialServiceId}`);
+      return item ? [item] : [];
+    }
+    return [];
+  };
+
+  const [booking, setBooking] = useState<BookingData>(() => ({
+    items: getInitialItems(),
     date: undefined,
     time: '',
     name: '',
     phone: '',
     cedula: '',
     paymentType: 'partial',
-  });
+  }));
 
-  const activeServices = services.filter(s => s.is_active);
-  const selectedServices = services.filter(s => booking.serviceIds.includes(s.id));
-  const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
-  const totalDuration = selectedServices.reduce((sum, s) => sum + s.duration, 0);
+  const totalPrice = booking.items.reduce((sum, item) => sum + item.price, 0);
+  const totalDuration = booking.items.reduce((sum, item) => sum + item.duration, 0);
 
-  const toggleService = (serviceId: string) => {
-    setBooking(prev => ({
-      ...prev,
-      serviceIds: prev.serviceIds.includes(serviceId)
-        ? prev.serviceIds.filter(id => id !== serviceId)
-        : [...prev.serviceIds, serviceId],
-    }));
+  const toggleItem = (item: BookingItem) => {
+    setBooking(prev => {
+      const exists = prev.items.find(i => i.id === item.id);
+      return {
+        ...prev,
+        items: exists
+          ? prev.items.filter(i => i.id !== item.id)
+          : [...prev.items, item],
+      };
+    });
   };
 
+  const isItemSelected = (id: string) => booking.items.some(i => i.id === id);
+
   const handleContinueToDateTime = () => {
-    if (booking.serviceIds.length === 0) {
-      toast.error('Selecciona al menos un servicio');
+    if (booking.items.length === 0) {
+      toast.error('Selecciona al menos un servicio o promoción');
       return;
     }
     setStep('datetime');
   };
 
-  // Generate time slots based on total duration of selected services
+  // Generate time slots based on total duration
   const getTimeSlots = () => {
     if (!booking.date) return [];
 
@@ -179,20 +242,20 @@ export default function BookingPage() {
   };
 
   const getWhatsAppMessage = () => {
-    if (selectedServices.length === 0 || !booking.date) return '';
+    if (booking.items.length === 0 || !booking.date) return '';
     
-    const serviceNames = selectedServices.map(s => s.name).join(', ');
+    const itemNames = booking.items.map(i => i.name).join(', ');
     const paymentAmount = booking.paymentType === 'full' 
       ? totalPrice 
       : settings.reservation_amount;
 
-    const message = `Hola, soy ${booking.name}, mi cédula es ${booking.cedula}. Quiero confirmar mi cita para el día ${format(booking.date, 'dd/MM/yyyy', { locale: es })} a las ${formatTime12h(booking.time)}. Servicios: ${serviceNames}. Total: $${totalPrice}. Monto a pagar: $${paymentAmount}. Adjunto mi comprobante de pago.`;
+    const message = `Hola, soy ${booking.name}, mi cédula es ${booking.cedula}. Quiero confirmar mi cita para el día ${format(booking.date, 'dd/MM/yyyy', { locale: es })} a las ${formatTime12h(booking.time)}. Servicios: ${itemNames}. Total: $${totalPrice}. Monto a pagar: $${paymentAmount}. Adjunto mi comprobante de pago.`;
 
     return encodeURIComponent(message);
   };
 
   const handleWhatsAppClick = async () => {
-    if (selectedServices.length === 0 || !booking.date) return;
+    if (booking.items.length === 0 || !booking.date) return;
     
     setSubmitting(true);
     
@@ -203,7 +266,6 @@ export default function BookingPage() {
       
       if (existingClient) {
         clientId = existingClient.id;
-        // Update name/phone if changed
         if (existingClient.name !== booking.name || existingClient.phone !== booking.phone) {
           await updateClient(existingClient.id, { name: booking.name, phone: booking.phone });
         }
@@ -231,23 +293,37 @@ export default function BookingPage() {
         ? totalPrice 
         : settings.reservation_amount;
       
-      // Create one appointment per service
-      for (const serviceId of booking.serviceIds) {
-        const service = services.find(s => s.id === serviceId);
-        const appointmentResult = await addAppointment({
-          client_id: clientId,
-          service_id: serviceId,
-          date: format(booking.date, 'yyyy-MM-dd'),
-          time: booking.time,
-          status: 'pending',
-          payment_status: 'pending',
-          payment_amount: booking.serviceIds.length === 1 ? paymentAmount : (service?.price || 0),
-          notes: `Cédula: ${booking.cedula}${booking.serviceIds.length > 1 ? ' | Reserva múltiple' : ''}`,
-        });
-        
-        if (!appointmentResult.success) {
-          throw new Error('Error al crear la cita');
-        }
+      // Build notes with all item details
+      const itemDetails = booking.items.map(i => `${i.name} ($${i.price})`).join(' + ');
+      const notes = `Cédula: ${booking.cedula} | ${itemDetails} | Total: $${totalPrice}${booking.items.length > 1 ? ' | Reserva múltiple' : ''}`;
+      
+      // For services, create appointments. For promotions, use first active service as placeholder.
+      const serviceItems = booking.items.filter(i => i.type === 'service');
+      const promoItems = booking.items.filter(i => i.type === 'promotion');
+      
+      // Create one appointment that groups everything
+      const firstServiceId = serviceItems.length > 0 
+        ? serviceItems[0].id.replace('service-', '')
+        : (activeServices[0]?.id || '');
+
+      if (!firstServiceId) {
+        throw new Error('No hay servicios disponibles');
+      }
+
+      // Create a single grouped appointment
+      const appointmentResult = await addAppointment({
+        client_id: clientId,
+        service_id: firstServiceId,
+        date: format(booking.date, 'yyyy-MM-dd'),
+        time: booking.time,
+        status: 'pending',
+        payment_status: 'pending',
+        payment_amount: paymentAmount,
+        notes,
+      });
+      
+      if (!appointmentResult.success) {
+        throw new Error('Error al crear la cita');
       }
       
       const phoneNumber = settings.whatsapp_number.replace(/\D/g, '');
@@ -296,59 +372,106 @@ export default function BookingPage() {
             ))}
           </div>
 
-          {/* Step 1: Service Selection (multi-select) */}
+          {/* Step 1: Service & Promotion Selection */}
           {step === 'service' && (
             <div className="animate-fade-in">
               <h1 className="font-display text-3xl font-bold text-center mb-2">
                 Selecciona tus servicios
               </h1>
               <p className="text-center text-muted-foreground mb-8">
-                Puedes elegir uno o varios servicios
+                Puedes elegir servicios y promociones
               </p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {activeServices.map((service) => {
-                  const isSelected = booking.serviceIds.includes(service.id);
-                  return (
-                    <Card 
-                      key={service.id}
-                      className={`cursor-pointer transition-all hover:shadow-elevated ${
-                        isSelected ? 'ring-2 ring-primary' : ''
-                      }`}
-                      onClick={() => toggleService(service.id)}
-                    >
-                      <CardContent className="p-4 flex items-center gap-4">
-                        <Checkbox checked={isSelected} className="pointer-events-none" />
-                        {service.image_url ? (
-                          <img src={service.image_url} alt={service.name} className="w-16 h-16 rounded-lg object-cover" />
-                        ) : (
-                          <div className="w-16 h-16 rounded-lg hero-gradient flex items-center justify-center text-2xl">💅</div>
-                        )}
-                        <div className="flex-1">
-                          <h3 className="font-semibold text-foreground">{service.name}</h3>
-                          <p className="text-sm text-muted-foreground">{service.duration} min</p>
-                        </div>
-                        <div className="text-lg font-bold text-primary">${service.price}</div>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
+
+              {/* Promotions Section */}
+              {promotionItems.length > 0 && (
+                <div className="mb-8">
+                  <h2 className="font-display text-lg font-semibold mb-3 flex items-center gap-2">
+                    <Tag className="w-5 h-5 text-primary" />
+                    Promociones activas
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {promotionItems.map((item) => {
+                      const selected = isItemSelected(item.id);
+                      return (
+                        <Card 
+                          key={item.id}
+                          className={`cursor-pointer transition-all hover:shadow-elevated ${
+                            selected ? 'ring-2 ring-primary' : ''
+                          }`}
+                          onClick={() => toggleItem(item)}
+                        >
+                          <CardContent className="p-4 flex items-center gap-4">
+                            <Checkbox checked={selected} className="pointer-events-none" />
+                            {item.image_url ? (
+                              <img src={item.image_url} alt={item.name} className="w-16 h-16 rounded-lg object-cover" />
+                            ) : (
+                              <div className="w-16 h-16 rounded-lg bg-primary/10 flex items-center justify-center text-2xl">🎉</div>
+                            )}
+                            <div className="flex-1">
+                              <h3 className="font-semibold text-foreground">{item.name}</h3>
+                              <Badge variant="secondary" className="text-xs mt-1">Promoción</Badge>
+                            </div>
+                            <div className="text-right">
+                              {item.originalPrice && (
+                                <span className="text-xs text-muted-foreground line-through block">${item.originalPrice}</span>
+                              )}
+                              <span className="text-lg font-bold text-primary">${item.price}</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Services Section */}
+              <div>
+                <h2 className="font-display text-lg font-semibold mb-3">Servicios</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {serviceItems.map((item) => {
+                    const selected = isItemSelected(item.id);
+                    return (
+                      <Card 
+                        key={item.id}
+                        className={`cursor-pointer transition-all hover:shadow-elevated ${
+                          selected ? 'ring-2 ring-primary' : ''
+                        }`}
+                        onClick={() => toggleItem(item)}
+                      >
+                        <CardContent className="p-4 flex items-center gap-4">
+                          <Checkbox checked={selected} className="pointer-events-none" />
+                          {item.image_url ? (
+                            <img src={item.image_url} alt={item.name} className="w-16 h-16 rounded-lg object-cover" />
+                          ) : (
+                            <div className="w-16 h-16 rounded-lg hero-gradient flex items-center justify-center text-2xl">💅</div>
+                          )}
+                          <div className="flex-1">
+                            <h3 className="font-semibold text-foreground">{item.name}</h3>
+                            <p className="text-sm text-muted-foreground">{item.duration} min</p>
+                          </div>
+                          <div className="text-lg font-bold text-primary">${item.price}</div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
               </div>
 
-              {activeServices.length === 0 && (
+              {activeServices.length === 0 && promotionItems.length === 0 && (
                 <div className="text-center py-12">
                   <p className="text-muted-foreground">No hay servicios disponibles en este momento</p>
                 </div>
               )}
 
               {/* Summary bar */}
-              {booking.serviceIds.length > 0 && (
+              {booking.items.length > 0 && (
                 <div className="mt-6 p-4 rounded-xl bg-card border shadow-soft">
                   <div className="flex flex-wrap gap-2 mb-3">
-                    {selectedServices.map(s => (
-                      <span key={s.id} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
-                        {s.name}
-                        <button onClick={(e) => { e.stopPropagation(); toggleService(s.id); }}>
+                    {booking.items.map(item => (
+                      <span key={item.id} className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
+                        {item.name}
+                        <button onClick={(e) => { e.stopPropagation(); toggleItem(item); }}>
                           <X className="w-3 h-3" />
                         </button>
                       </span>
@@ -356,7 +479,7 @@ export default function BookingPage() {
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="text-sm text-muted-foreground">
-                      {selectedServices.length} servicio{selectedServices.length > 1 ? 's' : ''} · {totalDuration} min · <span className="font-semibold text-foreground">${totalPrice}</span>
+                      {booking.items.length} item{booking.items.length > 1 ? 's' : ''} · {totalDuration} min · <span className="font-semibold text-foreground">${totalPrice}</span>
                     </div>
                     <Button onClick={handleContinueToDateTime} className="accent-gradient border-0">
                       Continuar
@@ -499,7 +622,7 @@ export default function BookingPage() {
           )}
 
           {/* Step 4: Confirmation */}
-          {step === 'confirm' && selectedServices.length > 0 && booking.date && (
+          {step === 'confirm' && booking.items.length > 0 && booking.date && (
             <div className="animate-fade-in">
               <Button variant="ghost" onClick={() => setStep('info')} className="mb-4">
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -513,12 +636,15 @@ export default function BookingPage() {
               <Card className="max-w-md mx-auto mb-6">
                 <CardContent className="pt-6 space-y-4">
                   <div className="py-2 border-b border-border">
-                    <span className="text-muted-foreground text-sm">Servicios</span>
+                    <span className="text-muted-foreground text-sm">Servicios y Promociones</span>
                     <div className="mt-1 space-y-1">
-                      {selectedServices.map(s => (
-                        <div key={s.id} className="flex justify-between">
-                          <span className="font-medium">{s.name}</span>
-                          <span className="text-muted-foreground">${s.price}</span>
+                      {booking.items.map(item => (
+                        <div key={item.id} className="flex justify-between">
+                          <span className="font-medium flex items-center gap-2">
+                            {item.name}
+                            {item.type === 'promotion' && <Badge variant="secondary" className="text-xs">Promo</Badge>}
+                          </span>
+                          <span className="text-muted-foreground">${item.price}</span>
                         </div>
                       ))}
                     </div>
@@ -542,7 +668,7 @@ export default function BookingPage() {
                     <span className="font-semibold">{booking.name}</span>
                   </div>
                   <div className="flex justify-between items-center py-2 border-b border-border">
-                    <span className="text-muted-foreground">Total servicios</span>
+                    <span className="text-muted-foreground">Total</span>
                     <span className="font-bold text-lg">${totalPrice}</span>
                   </div>
                   <div className="flex justify-between items-center py-2">
