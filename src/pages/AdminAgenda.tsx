@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { format, parseISO, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday, isFuture, isBefore, startOfToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, CreditCard, DollarSign, Search, MessageCircle } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock, Ban, Trash2, CheckCircle, XCircle, AlertCircle, Plus, CreditCard, DollarSign, Search, MessageCircle, CheckCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { Client } from '@/lib/supabase';
 import { formatTime12h, openWhatsApp } from '@/lib/utils';
@@ -41,7 +41,7 @@ export default function AdminAgenda() {
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [selectedClientForDetail, setSelectedClientForDetail] = useState<Client | null>(null);
   const [selectedAppointmentForPayment, setSelectedAppointmentForPayment] = useState<string | null>(null);
-  const [paymentForm, setPaymentForm] = useState({ status: 'pending', amount: '' });
+  const [paymentForm, setPaymentForm] = useState({ status: 'pending', amount: '', confirmed: false });
   const [customHoursForDay, setCustomHoursForDay] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -52,7 +52,6 @@ export default function AdminAgenda() {
     reason: '',
   });
 
-  // New appointment form
   const [appointmentForm, setAppointmentForm] = useState({
     cedula: '',
     name: '',
@@ -76,7 +75,6 @@ export default function AdminAgenda() {
 
   const activeServices = services.filter(s => s.is_active);
 
-  // Filter appointments by search
   const filterBySearch = (apts: typeof appointments) => {
     if (!searchTerm.trim()) return apts;
     const term = searchTerm.toLowerCase().trim();
@@ -283,7 +281,6 @@ export default function AdminAgenda() {
     }
   };
 
-  // Custom hours for specific day
   const openHoursDialog = () => {
     if (!selectedDate) return;
     const dateStr = format(selectedDate, 'yyyy-MM-dd');
@@ -324,7 +321,7 @@ export default function AdminAgenda() {
     }
   };
 
-  // Payment management
+  // Payment management - enhanced with confirmation
   const openPaymentDialog = (appointmentId: string) => {
     const apt = appointments.find(a => a.id === appointmentId);
     if (!apt) return;
@@ -332,12 +329,17 @@ export default function AdminAgenda() {
     setPaymentForm({
       status: apt.payment_status,
       amount: apt.payment_amount.toString(),
+      confirmed: false,
     });
     setPaymentDialogOpen(true);
   };
 
   const handlePaymentUpdate = async () => {
     if (!selectedAppointmentForPayment) return;
+    if (!paymentForm.confirmed) {
+      toast.error('Debes confirmar el pago antes de actualizar');
+      return;
+    }
     const apt = appointments.find(a => a.id === selectedAppointmentForPayment);
     if (!apt) return;
 
@@ -350,17 +352,18 @@ export default function AdminAgenda() {
     });
 
     if (result.success) {
+      // Register transaction for the difference
       if (newAmount > oldAmount && (paymentForm.status === 'partial' || paymentForm.status === 'full')) {
         const diff = newAmount - oldAmount;
         await addTransaction({
           type: 'income',
           amount: diff,
-          description: `Pago de ${apt.client?.name || 'cliente'} - ${apt.service?.name || 'servicio'}`,
-          date: apt.date,
+          description: `Pago ${paymentForm.status === 'full' ? 'completo' : 'parcial (abono)'} de ${apt.client?.name || 'cliente'} - ${apt.service?.name || 'servicio'}`,
+          date: format(new Date(), 'yyyy-MM-dd'),
           appointment_id: apt.id,
         });
       }
-      toast.success('Pago actualizado');
+      toast.success('Pago actualizado y registrado');
       setPaymentDialogOpen(false);
     } else {
       toast.error('Error al actualizar pago');
@@ -389,9 +392,13 @@ export default function AdminAgenda() {
 
   const paymentStatusLabels: Record<string, string> = {
     pending: 'Sin pagar',
-    partial: 'Pago parcial',
-    full: 'Pagado',
+    partial: 'Abono parcial',
+    full: 'Pagado completo',
   };
+
+  const selectedAptForPayment = selectedAppointmentForPayment 
+    ? appointments.find(a => a.id === selectedAppointmentForPayment) 
+    : null;
 
   const renderAppointmentCard = (apt: typeof appointments[0], showDate = false) => (
     <div key={apt.id} className="p-3 sm:p-4 rounded-lg border bg-card">
@@ -440,9 +447,31 @@ export default function AdminAgenda() {
           <CreditCard className="w-3 h-3 inline mr-1" />
           {apt.client?.cedula}
         </p>
-        <p className="text-sm font-medium text-foreground mt-1">
-          Monto: ${apt.payment_amount.toFixed(2)}
-        </p>
+        
+        {/* Payment info with clear abono display */}
+        <div className="mt-2 p-2 rounded-md bg-muted/50">
+          {apt.payment_status === 'pending' && (
+            <p className="text-sm text-red-600 font-medium">⏳ Sin pago registrado</p>
+          )}
+          {apt.payment_status === 'partial' && (
+            <p className="text-sm text-amber-700 font-medium">
+              💰 Cliente abonó: <span className="text-lg">${apt.payment_amount.toFixed(2)}</span>
+              {apt.service?.price && (
+                <span className="text-muted-foreground ml-1">(Total: ${apt.service.price})</span>
+              )}
+            </p>
+          )}
+          {apt.payment_status === 'full' && (
+            <p className="text-sm text-green-700 font-medium">
+              ✅ Pagado completo: <span className="text-lg">${apt.payment_amount.toFixed(2)}</span>
+            </p>
+          )}
+        </div>
+
+        {/* Notes with service details */}
+        {apt.notes && apt.notes.includes('|') && (
+          <p className="text-xs text-muted-foreground mt-1 italic">{apt.notes}</p>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -533,34 +562,19 @@ export default function AdminAgenda() {
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 space-y-3">
                       <p className="text-sm text-amber-800 font-medium">Cliente nuevo - Ingresa sus datos:</p>
                       <div className="space-y-2">
-                        <Input
-                          placeholder="Nombre completo"
-                          value={appointmentForm.name}
-                          onChange={(e) => setAppointmentForm({ ...appointmentForm, name: e.target.value })}
-                        />
-                        <Input
-                          placeholder="Teléfono"
-                          value={appointmentForm.phone}
-                          onChange={(e) => setAppointmentForm({ ...appointmentForm, phone: e.target.value })}
-                        />
+                        <Input placeholder="Nombre completo" value={appointmentForm.name} onChange={(e) => setAppointmentForm({ ...appointmentForm, name: e.target.value })} />
+                        <Input placeholder="Teléfono" value={appointmentForm.phone} onChange={(e) => setAppointmentForm({ ...appointmentForm, phone: e.target.value })} />
                       </div>
                     </div>
                   )}
 
                   <div className="space-y-2">
                     <Label>Servicio</Label>
-                    <Select
-                      value={appointmentForm.service_id}
-                      onValueChange={(v) => setAppointmentForm({ ...appointmentForm, service_id: v, time: '' })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar servicio" />
-                      </SelectTrigger>
+                    <Select value={appointmentForm.service_id} onValueChange={(v) => setAppointmentForm({ ...appointmentForm, service_id: v, time: '' })}>
+                      <SelectTrigger><SelectValue placeholder="Seleccionar servicio" /></SelectTrigger>
                       <SelectContent>
                         {activeServices.map((s) => (
-                          <SelectItem key={s.id} value={s.id}>
-                            {s.name} - ${s.price} ({s.duration} min)
-                          </SelectItem>
+                          <SelectItem key={s.id} value={s.id}>{s.name} - ${s.price} ({s.duration} min)</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -568,14 +582,7 @@ export default function AdminAgenda() {
 
                   <div className="space-y-2">
                     <Label>Fecha</Label>
-                    <Calendar
-                      mode="single"
-                      selected={appointmentForm.date}
-                      onSelect={(date) => date && setAppointmentForm({ ...appointmentForm, date, time: '' })}
-                      disabled={(date) => isBefore(date, startOfToday())}
-                      locale={es}
-                      className="rounded-lg border pointer-events-auto"
-                    />
+                    <Calendar mode="single" selected={appointmentForm.date} onSelect={(date) => date && setAppointmentForm({ ...appointmentForm, date, time: '' })} disabled={(date) => isBefore(date, startOfToday())} locale={es} className="rounded-lg border pointer-events-auto" />
                   </div>
 
                   <div className="space-y-2">
@@ -583,13 +590,7 @@ export default function AdminAgenda() {
                     {appointmentForm.service_id ? (
                       <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-32 overflow-y-auto">
                         {getAvailableTimeSlots().map((time) => (
-                          <Button
-                            key={time}
-                            type="button"
-                            variant={appointmentForm.time === time ? 'default' : 'outline'}
-                            size="sm"
-                            onClick={() => setAppointmentForm({ ...appointmentForm, time })}
-                          >
+                          <Button key={time} type="button" variant={appointmentForm.time === time ? 'default' : 'outline'} size="sm" onClick={() => setAppointmentForm({ ...appointmentForm, time })}>
                             {formatTime12h(time)}
                           </Button>
                         ))}
@@ -599,9 +600,7 @@ export default function AdminAgenda() {
                     )}
                   </div>
 
-                  <Button type="submit" className="w-full accent-gradient border-0">
-                    Agendar Cita
-                  </Button>
+                  <Button type="submit" className="w-full accent-gradient border-0">Agendar Cita</Button>
                 </form>
               </DialogContent>
             </Dialog>
@@ -620,43 +619,23 @@ export default function AdminAgenda() {
                 <form onSubmit={handleBlockSubmit} className="space-y-4">
                   <div className="space-y-2">
                     <Label>Fecha</Label>
-                    <Calendar
-                      mode="single"
-                      selected={blockForm.date}
-                      onSelect={(date) => date && setBlockForm({ ...blockForm, date })}
-                      locale={es}
-                      className="rounded-lg border pointer-events-auto"
-                    />
+                    <Calendar mode="single" selected={blockForm.date} onSelect={(date) => date && setBlockForm({ ...blockForm, date })} locale={es} className="rounded-lg border pointer-events-auto" />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Hora inicio</Label>
-                      <Input
-                        type="time"
-                        value={blockForm.start_time}
-                        onChange={(e) => setBlockForm({ ...blockForm, start_time: e.target.value })}
-                      />
+                      <Input type="time" value={blockForm.start_time} onChange={(e) => setBlockForm({ ...blockForm, start_time: e.target.value })} />
                     </div>
                     <div className="space-y-2">
                       <Label>Hora fin</Label>
-                      <Input
-                        type="time"
-                        value={blockForm.end_time}
-                        onChange={(e) => setBlockForm({ ...blockForm, end_time: e.target.value })}
-                      />
+                      <Input type="time" value={blockForm.end_time} onChange={(e) => setBlockForm({ ...blockForm, end_time: e.target.value })} />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <Label>Razón (opcional)</Label>
-                    <Input
-                      value={blockForm.reason}
-                      onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })}
-                      placeholder="Ej: Descanso, Capacitación..."
-                    />
+                    <Input value={blockForm.reason} onChange={(e) => setBlockForm({ ...blockForm, reason: e.target.value })} placeholder="Ej: Descanso, Capacitación..." />
                   </div>
-                  <Button type="submit" className="w-full accent-gradient border-0">
-                    Bloquear
-                  </Button>
+                  <Button type="submit" className="w-full accent-gradient border-0">Bloquear</Button>
                 </form>
               </DialogContent>
             </Dialog>
@@ -666,12 +645,7 @@ export default function AdminAgenda() {
         {/* Search Bar */}
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por nombre, cédula o teléfono..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-          />
+          <Input placeholder="Buscar por nombre, cédula o teléfono..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -684,54 +658,25 @@ export default function AdminAgenda() {
                 <span className="sm:hidden">{format(currentMonth, 'MMM yyyy', { locale: es })}</span>
               </CardTitle>
               <div className="flex gap-2">
-                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}><ChevronLeft className="w-4 h-4" /></Button>
+                <Button variant="outline" size="icon" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}><ChevronRight className="w-4 h-4" /></Button>
               </div>
             </CardHeader>
             <CardContent className="overflow-x-auto">
               <div className="grid grid-cols-7 gap-1 min-w-[280px]">
                 {['D', 'L', 'M', 'X', 'J', 'V', 'S'].map((day) => (
-                  <div key={day} className="text-center text-xs sm:text-sm font-medium text-muted-foreground py-1 sm:py-2">
-                    {day}
-                  </div>
+                  <div key={day} className="text-center text-xs sm:text-sm font-medium text-muted-foreground py-1 sm:py-2">{day}</div>
                 ))}
-                
-                {Array(monthDays[0].getDay()).fill(null).map((_, i) => (
-                  <div key={`empty-${i}`} />
-                ))}
-                
+                {Array(monthDays[0].getDay()).fill(null).map((_, i) => (<div key={`empty-${i}`} />))}
                 {monthDays.map((day) => {
                   const dayAppointments = getAppointmentsForDate(day);
                   const dayBlocked = getBlockedForDate(day);
                   const isSelected = selectedDate && isSameDay(day, selectedDate);
-                  
                   return (
-                    <button
-                      key={day.toISOString()}
-                      onClick={() => setSelectedDate(day)}
-                      className={`p-1 sm:p-2 min-h-[48px] sm:min-h-[80px] rounded-lg border transition-colors text-left ${
-                        isSelected 
-                          ? 'border-primary bg-primary/5' 
-                          : 'border-transparent hover:bg-muted'
-                      }`}
-                    >
-                      <div className="text-xs sm:text-sm font-medium mb-1">
-                        {format(day, 'd')}
-                      </div>
-                      {dayAppointments.length > 0 && (
-                        <div className="text-[10px] sm:text-xs accent-gradient text-primary-foreground px-1 rounded mb-1 truncate">
-                          {dayAppointments.length} cita{dayAppointments.length > 1 ? 's' : ''}
-                        </div>
-                      )}
-                      {dayBlocked.length > 0 && (
-                        <div className="text-[10px] sm:text-xs bg-destructive/10 text-destructive px-1 rounded truncate">
-                          Bloq.
-                        </div>
-                      )}
+                    <button key={day.toISOString()} onClick={() => setSelectedDate(day)} className={`p-1 sm:p-2 min-h-[48px] sm:min-h-[80px] rounded-lg border transition-colors text-left ${isSelected ? 'border-primary bg-primary/5' : 'border-transparent hover:bg-muted'}`}>
+                      <div className="text-xs sm:text-sm font-medium mb-1">{format(day, 'd')}</div>
+                      {dayAppointments.length > 0 && (<div className="text-[10px] sm:text-xs accent-gradient text-primary-foreground px-1 rounded mb-1 truncate">{dayAppointments.length} cita{dayAppointments.length > 1 ? 's' : ''}</div>)}
+                      {dayBlocked.length > 0 && (<div className="text-[10px] sm:text-xs bg-destructive/10 text-destructive px-1 rounded truncate">Bloq.</div>)}
                     </button>
                   );
                 })}
@@ -743,10 +688,7 @@ export default function AdminAgenda() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base sm:text-lg">
-                {selectedDate 
-                  ? format(selectedDate, "EEEE d 'de' MMMM", { locale: es })
-                  : 'Selecciona un día'
-                }
+                {selectedDate ? format(selectedDate, "EEEE d 'de' MMMM", { locale: es }) : 'Selecciona un día'}
               </CardTitle>
               {selectedDate && (
                 <Button variant="outline" size="sm" onClick={openHoursDialog}>
@@ -759,36 +701,22 @@ export default function AdminAgenda() {
               {selectedDate ? (
                 <div className="space-y-3">
                   {selectedDateBlocked.map((block) => (
-                    <div 
-                      key={block.id}
-                      className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-between"
-                    >
+                    <div key={block.id} className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 flex items-center justify-between">
                       <div>
-                        <div className="flex items-center gap-2 text-destructive font-medium text-sm">
-                          <Ban className="w-4 h-4" />
-                          Bloqueado
-                        </div>
+                        <div className="flex items-center gap-2 text-destructive font-medium text-sm"><Ban className="w-4 h-4" />Bloqueado</div>
                         <p className="text-sm text-destructive/80">{formatTime12h(block.start_time)} - {formatTime12h(block.end_time)}</p>
                         {block.reason && <p className="text-xs text-destructive/60">{block.reason}</p>}
                       </div>
-                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteBlock(block.id)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                      <Button variant="ghost" size="icon" className="text-destructive" onClick={() => handleDeleteBlock(block.id)}><Trash2 className="w-4 h-4" /></Button>
                     </div>
                   ))}
-
                   {selectedDateAppointments.map(apt => renderAppointmentCard(apt))}
-
                   {selectedDateAppointments.length === 0 && selectedDateBlocked.length === 0 && (
-                    <p className="text-center text-muted-foreground py-8 text-sm">
-                      No hay citas ni bloqueos para este día
-                    </p>
+                    <p className="text-center text-muted-foreground py-8 text-sm">No hay citas ni bloqueos para este día</p>
                   )}
                 </div>
               ) : (
-                <p className="text-center text-muted-foreground py-8 text-sm">
-                  Selecciona un día del calendario
-                </p>
+                <p className="text-center text-muted-foreground py-8 text-sm">Selecciona un día del calendario</p>
               )}
             </CardContent>
           </Card>
@@ -810,34 +738,26 @@ export default function AdminAgenda() {
                     <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <button 
-                            className="font-semibold text-foreground hover:text-primary hover:underline"
-                            onClick={() => apt.client && setSelectedClientForDetail(apt.client)}
-                          >
+                          <button className="font-semibold text-foreground hover:text-primary hover:underline" onClick={() => apt.client && setSelectedClientForDetail(apt.client)}>
                             {apt.client?.name || 'Cliente'}
                           </button>
                           {apt.client?.phone && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              onClick={(e) => { e.stopPropagation(); openWhatsApp(apt.client!.phone); }}
-                              title="WhatsApp"
-                            >
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-green-600 hover:text-green-700 hover:bg-green-50" onClick={(e) => { e.stopPropagation(); openWhatsApp(apt.client!.phone); }} title="WhatsApp">
                               <MessageCircle className="w-3.5 h-3.5" />
                             </Button>
                           )}
                           <Badge className="bg-amber-100 text-amber-800 border-amber-200">Pendiente</Badge>
-                          <Badge className={paymentStatusColors[apt.payment_status]}>
-                            {paymentStatusLabels[apt.payment_status]}
-                          </Badge>
+                          <Badge className={paymentStatusColors[apt.payment_status]}>{paymentStatusLabels[apt.payment_status]}</Badge>
                         </div>
                         <p className="text-sm text-muted-foreground">
                           {apt.service?.name} • {format(parseISO(apt.date), "d MMM", { locale: es })} {formatTime12h(apt.time)}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          Cédula: {apt.client?.cedula} • ${apt.payment_amount.toFixed(2)}
+                          Cédula: {apt.client?.cedula} • Monto indicado: ${apt.payment_amount.toFixed(2)}
                         </p>
+                        {apt.notes && apt.notes.includes('|') && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">{apt.notes}</p>
+                        )}
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white" onClick={() => handleStatusChange(apt.id, 'confirmed')}>
@@ -885,85 +805,125 @@ export default function AdminAgenda() {
         <Dialog open={hoursDialogOpen} onOpenChange={setHoursDialogOpen}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>
-                Horarios para {selectedDate ? format(selectedDate, "d 'de' MMMM", { locale: es }) : ''}
-              </DialogTitle>
+              <DialogTitle>Horarios para {selectedDate ? format(selectedDate, "d 'de' MMMM", { locale: es }) : ''}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Selecciona las horas que quieres que aparezcan disponibles solo para este día. Si no seleccionas ninguna, se usará el horario general.
-              </p>
+              <p className="text-sm text-muted-foreground">Selecciona las horas disponibles solo para este día.</p>
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                 {getAllPossibleSlots().map((slot) => (
-                  <label
-                    key={slot}
-                    className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${
-                      customHoursForDay.includes(slot)
-                        ? 'bg-primary/10 border-primary'
-                        : 'border-border hover:bg-muted'
-                    }`}
-                  >
-                    <Checkbox
-                      checked={customHoursForDay.includes(slot)}
-                      onCheckedChange={() => toggleDayHour(slot)}
-                    />
+                  <label key={slot} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition-colors ${customHoursForDay.includes(slot) ? 'bg-primary/10 border-primary' : 'border-border hover:bg-muted'}`}>
+                    <Checkbox checked={customHoursForDay.includes(slot)} onCheckedChange={() => toggleDayHour(slot)} />
                     <span className="text-sm font-medium">{formatTime12h(slot)}</span>
                   </label>
                 ))}
               </div>
               {customHoursForDay.length > 0 && (
-                <p className="text-xs text-primary font-medium">
-                  {customHoursForDay.length} hora(s): {customHoursForDay.map(h => formatTime12h(h)).join(', ')}
-                </p>
+                <p className="text-xs text-primary font-medium">{customHoursForDay.length} hora(s): {customHoursForDay.map(h => formatTime12h(h)).join(', ')}</p>
               )}
               <div className="flex gap-2">
-                <Button onClick={handleSaveCustomHours} className="flex-1 accent-gradient border-0">
-                  Guardar
-                </Button>
-                {customHoursForDay.length > 0 && (
-                  <Button variant="outline" onClick={() => setCustomHoursForDay([])}>
-                    Limpiar
-                  </Button>
-                )}
+                <Button onClick={handleSaveCustomHours} className="flex-1 accent-gradient border-0">Guardar</Button>
+                {customHoursForDay.length > 0 && (<Button variant="outline" onClick={() => setCustomHoursForDay([])}>Limpiar</Button>)}
               </div>
             </div>
           </DialogContent>
         </Dialog>
 
-        {/* Payment Dialog */}
+        {/* Enhanced Payment Dialog with Confirmation */}
         <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
           <DialogContent className="max-w-sm">
             <DialogHeader>
               <DialogTitle>Gestionar Pago</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <Label>Estado de pago</Label>
-                <Select value={paymentForm.status} onValueChange={(v) => setPaymentForm({ ...paymentForm, status: v })}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pending">Sin pagar</SelectItem>
-                    <SelectItem value="partial">Pago parcial</SelectItem>
-                    <SelectItem value="full">Pagado completo</SelectItem>
-                  </SelectContent>
-                </Select>
+            {selectedAptForPayment && (
+              <div className="space-y-4">
+                {/* Client & service info */}
+                <div className="p-3 rounded-lg bg-muted/50 space-y-1">
+                  <p className="font-medium">{selectedAptForPayment.client?.name}</p>
+                  <p className="text-sm text-muted-foreground">{selectedAptForPayment.service?.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Precio servicio: ${selectedAptForPayment.service?.price?.toFixed(2) || '0.00'}
+                  </p>
+                  {selectedAptForPayment.notes && selectedAptForPayment.notes.includes('|') && (
+                    <p className="text-xs text-muted-foreground italic mt-1">{selectedAptForPayment.notes}</p>
+                  )}
+                </div>
+
+                {/* Current payment status */}
+                <div className="p-3 rounded-lg border border-amber-200 bg-amber-50">
+                  <p className="text-sm font-medium text-amber-800">
+                    Estado actual: {paymentStatusLabels[selectedAptForPayment.payment_status]}
+                  </p>
+                  <p className="text-sm text-amber-700">
+                    Monto registrado: ${selectedAptForPayment.payment_amount.toFixed(2)}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>¿Qué tipo de pago recibiste?</Label>
+                  <Select value={paymentForm.status} onValueChange={(v) => setPaymentForm({ ...paymentForm, status: v, confirmed: false })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Sin pagar</SelectItem>
+                      <SelectItem value="partial">Abono parcial</SelectItem>
+                      <SelectItem value="full">Pago completo</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Monto recibido ($)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={paymentForm.amount}
+                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value, confirmed: false })}
+                    placeholder="0.00"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Ingresa el monto total que ha pagado el cliente hasta ahora
+                  </p>
+                </div>
+
+                {/* Confirmation checkbox */}
+                <div className="p-3 rounded-lg border-2 border-primary/30 bg-primary/5">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <Checkbox
+                      checked={paymentForm.confirmed}
+                      onCheckedChange={(checked) => setPaymentForm({ ...paymentForm, confirmed: checked === true })}
+                      className="mt-0.5"
+                    />
+                    <div>
+                      {paymentForm.status === 'full' ? (
+                        <p className="text-sm font-medium">
+                          ¿Confirmas que el cliente pagó completo <span className="text-primary">${paymentForm.amount || '0'}</span>?
+                        </p>
+                      ) : paymentForm.status === 'partial' ? (
+                        <p className="text-sm font-medium">
+                          ¿Confirmas que el cliente abonó <span className="text-primary">${paymentForm.amount || '0'}</span>?
+                        </p>
+                      ) : (
+                        <p className="text-sm font-medium">
+                          ¿Confirmas que quieres marcar como sin pago?
+                        </p>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Esta acción registrará el movimiento en finanzas
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                <Button 
+                  onClick={handlePaymentUpdate} 
+                  className="w-full accent-gradient border-0"
+                  disabled={!paymentForm.confirmed}
+                >
+                  <CheckCheck className="w-4 h-4 mr-2" />
+                  Confirmar y Actualizar Pago
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label>Monto pagado ($)</Label>
-                <Input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  value={paymentForm.amount}
-                  onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
-                />
-              </div>
-              <Button onClick={handlePaymentUpdate} className="w-full accent-gradient border-0">
-                Actualizar Pago
-              </Button>
-            </div>
+            )}
           </DialogContent>
         </Dialog>
 
