@@ -16,7 +16,9 @@ import AdminClients from "./pages/AdminClients";
 import AdminFinances from "./pages/AdminFinances";
 import AdminPromotions from "./pages/AdminPromotions";
 import AdminSettings from "./pages/AdminSettings";
+import AdminNotifications from "./pages/AdminNotifications";
 import NotFound from "./pages/NotFound";
+import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +30,7 @@ const App = () => (
           <Toaster />
           <Sonner />
           <BrowserRouter>
+            <PWAInstallPrompt />
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Index />} />
@@ -43,6 +46,7 @@ const App = () => (
               <Route path="/admin/finanzas" element={<AdminFinances />} />
               <Route path="/admin/promociones" element={<AdminPromotions />} />
               <Route path="/admin/configuracion" element={<AdminSettings />} />
+              <Route path="/admin/notificaciones" element={<AdminNotifications />} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

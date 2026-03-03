@@ -13,6 +13,7 @@ import {
   DollarSign, 
   Settings, 
   Tag,
+  Bell,
   LogOut,
   Home,
   Menu
@@ -29,6 +30,7 @@ const navItems = [
   { to: '/admin/promociones', label: 'Promociones', icon: Tag },
   { to: '/admin/clientes', label: 'Clientes', icon: Users },
   { to: '/admin/finanzas', label: 'Finanzas', icon: DollarSign },
+  { to: '/admin/notificaciones', label: 'Notificaciones', icon: Bell },
   { to: '/admin/configuracion', label: 'Configuración', icon: Settings },
 ];
 
