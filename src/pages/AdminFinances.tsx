@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, TrendingUp, TrendingDown, DollarSign, ArrowUpCircle, ArrowDownCircle, Search, Filter, CalendarIcon } from 'lucide-react';
+import { Plus, Trash2, TrendingUp, TrendingDown, DollarSign, ArrowUpCircle, ArrowDownCircle, Search, Filter, CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+
+const TX_PER_PAGE = 20;
 import { toast } from 'sonner';
 import { format, parseISO, startOfMonth, endOfMonth, startOfWeek, endOfWeek, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -88,7 +90,16 @@ export default function AdminFinances() {
     return combined;
   }, [transactions, appointments, appointmentClientMap]);
 
-  // Filtered
+  const [txPage, setTxPage] = useState(1);
+
+  // Reset page when filters change
+  const filterKey = `${searchQuery}-${dateFilter}-${typeFilter}-${customFrom}-${customTo}`;
+  const prevFilterKey = useState(filterKey);
+  if (prevFilterKey[0] !== filterKey) {
+    prevFilterKey[1](filterKey);
+    setTxPage(1);
+  }
+
   const filteredTransactions = useMemo(() => {
     const now = new Date();
     const todayStr = format(now, 'yyyy-MM-dd');
@@ -120,6 +131,9 @@ export default function AdminFinances() {
       return true;
     });
   }, [allTransactions, searchQuery, dateFilter, typeFilter, customFrom, customTo]);
+
+  const txTotalPages = Math.max(1, Math.ceil(filteredTransactions.length / TX_PER_PAGE));
+  const paginatedTransactions = filteredTransactions.slice((txPage - 1) * TX_PER_PAGE, txPage * TX_PER_PAGE);
 
   const totalIncome = filteredTransactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const totalExpenses = filteredTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
@@ -314,7 +328,7 @@ export default function AdminFinances() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredTransactions.map((tx) => (
+                  {paginatedTransactions.map((tx) => (
                     <TableRow key={tx.id}>
                       <TableCell className="text-sm whitespace-nowrap">
                         <div>{format(parseISO(tx.date), 'dd/MM/yyyy', { locale: es })}</div>
@@ -364,6 +378,21 @@ export default function AdminFinances() {
               </div>
             )}
           </CardContent>
+          {txTotalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t">
+              <p className="text-sm text-muted-foreground">
+                {filteredTransactions.length} transaccion{filteredTransactions.length !== 1 ? 'es' : ''} · Página {txPage} de {txTotalPages}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setTxPage(p => Math.max(1, p - 1))} disabled={txPage === 1}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setTxPage(p => Math.min(txTotalPages, p + 1))} disabled={txPage === txTotalPages}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       </div>
     </AdminLayout>
