@@ -84,16 +84,27 @@ export default function AdminNotifications() {
       if (error) throw error;
 
       // Log the notification
+      const actualSent = data?.sent || 0;
       await supabase.from('notification_logs').insert({
         title: title.trim(),
         body: body.trim(),
-        sent_count: data?.sent || subscribers.length,
+        sent_count: actualSent,
       });
 
-      toast({
-        title: '¡Enviado!',
-        description: `Notificación enviada a ${data?.sent || subscribers.length} clientas`,
-      });
+      if (actualSent > 0) {
+        toast({
+          title: '¡Enviado!',
+          description: `Notificación enviada a ${actualSent} clientas`,
+        });
+      } else {
+        toast({
+          title: 'Sin entregas',
+          description: `Las suscripciones pueden estar expiradas. Se limpiaron ${data?.expired_cleaned || 0} suscripciones inválidas. Pide a las clientas que reactiven las notificaciones.`,
+          variant: 'destructive',
+        });
+        // Reload subscribers to reflect cleaned ones
+        loadSubscribers();
+      }
 
       setTitle('');
       setBody('');

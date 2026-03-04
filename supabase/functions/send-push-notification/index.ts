@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import webpush from 'npm:web-push@3.6.7';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.49.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -35,9 +36,15 @@ serve(async (req) => {
       );
     }
 
-    const payload = JSON.stringify({ title, body });
+    const payload = JSON.stringify({ title, body, url: '/' });
     let sent = 0;
     const errors: string[] = [];
+    const expiredEndpoints: string[] = [];
+
+    // Initialize Supabase client to clean up expired subscriptions
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
 
     for (const sub of subscriptions) {
       try {
@@ -47,13 +54,40 @@ serve(async (req) => {
         );
         sent++;
       } catch (err: any) {
-        console.error(`Failed to send to ${sub.endpoint}:`, err.message);
-        errors.push(err.message);
+        const statusCode = err.statusCode || err.status;
+        console.error(`Failed to send to ${sub.endpoint}: status=${statusCode} message=${err.message}`);
+        
+        // 404 or 410 means the subscription is expired/invalid - clean it up
+        if (statusCode === 404 || statusCode === 410 || statusCode === 403) {
+          expiredEndpoints.push(sub.endpoint);
+          console.log(`Marking subscription as expired: ${sub.endpoint}`);
+        }
+        
+        errors.push(`status=${statusCode}: ${err.message}`);
+      }
+    }
+
+    // Remove expired subscriptions from database
+    if (expiredEndpoints.length > 0) {
+      const { error: deleteError } = await supabase
+        .from('push_subscriptions')
+        .delete()
+        .in('endpoint', expiredEndpoints);
+      
+      if (deleteError) {
+        console.error('Failed to clean up expired subscriptions:', deleteError);
+      } else {
+        console.log(`Cleaned up ${expiredEndpoints.length} expired subscriptions`);
       }
     }
 
     return new Response(
-      JSON.stringify({ sent, failed: errors.length, errors: errors.slice(0, 5) }),
+      JSON.stringify({ 
+        sent, 
+        failed: errors.length, 
+        expired_cleaned: expiredEndpoints.length,
+        errors: errors.slice(0, 5) 
+      }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err: any) {
