@@ -73,10 +73,26 @@ export function usePWA() {
       const registration = await navigator.serviceWorker.ready;
       const pm = (registration as any).pushManager;
       if (!pm) return null;
-      const subscription = await pm.subscribe({
+
+      // Check for existing subscription first
+      let subscription = await pm.getSubscription();
+      
+      // If existing subscription, unsubscribe and create fresh one
+      // This handles cases where the old subscription became stale
+      if (subscription) {
+        try {
+          await subscription.unsubscribe();
+        } catch (e) {
+          console.warn('Failed to unsubscribe old push subscription:', e);
+        }
+      }
+
+      // Create a fresh subscription
+      subscription = await pm.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
       });
+      
       setPushSubscription(subscription);
       
       // Store subscription in Supabase
@@ -88,6 +104,7 @@ export function usePWA() {
         auth: subJSON.keys?.auth,
       }, { onConflict: 'endpoint' });
       
+      console.log('Push subscription stored successfully:', subJSON.endpoint?.substring(0, 50));
       return subscription;
     } catch (err) {
       console.error('Push subscription failed:', err);
