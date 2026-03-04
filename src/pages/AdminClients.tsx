@@ -10,10 +10,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Pencil, Trash2, Search, AlertTriangle, Heart, MessageCircle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, AlertTriangle, Heart, MessageCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { Client } from '@/lib/supabase';
 import { openWhatsApp } from '@/lib/utils';
+
+const CLIENTS_PER_PAGE = 20;
 
 export default function AdminClients() {
   const { clients, loading, addClient, updateClient, deleteClient } = useClients();
@@ -92,11 +94,22 @@ export default function AdminClients() {
     return appointments.filter(a => a.client_id === clientId).length;
   };
 
+  const [currentPage, setCurrentPage] = useState(1);
+
   const filteredClients = clients.filter(c => 
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.phone.includes(searchTerm) ||
     c.cedula.includes(searchTerm)
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredClients.length / CLIENTS_PER_PAGE));
+  const paginatedClients = filteredClients.slice((currentPage - 1) * CLIENTS_PER_PAGE, currentPage * CLIENTS_PER_PAGE);
+
+  // Reset page when search changes
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
 
   return (
     <AdminLayout>
@@ -182,7 +195,7 @@ export default function AdminClients() {
           <Input
             placeholder="Buscar por nombre, teléfono o cédula..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -200,7 +213,7 @@ export default function AdminClients() {
           {loading ? (
             <div className="p-8 text-center text-muted-foreground">Cargando...</div>
           ) : (
-            filteredClients.map((client) => (
+            paginatedClients.map((client) => (
               <Card 
                 key={client.id} 
                 className="cursor-pointer hover:shadow-card transition-shadow"
@@ -254,6 +267,23 @@ export default function AdminClients() {
             </div>
           )}
         </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-muted-foreground">
+              {filteredClients.length} cliente{filteredClients.length !== 1 ? 's' : ''} · Página {currentPage} de {totalPages}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

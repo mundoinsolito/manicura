@@ -52,8 +52,18 @@ export default function AdminNotifications() {
       .from('notification_logs')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(5);
     if (data) setLogs(data);
+
+    // Clean up old logs beyond the latest 5
+    const { data: allLogs } = await supabase
+      .from('notification_logs')
+      .select('id')
+      .order('created_at', { ascending: false });
+    if (allLogs && allLogs.length > 5) {
+      const idsToDelete = allLogs.slice(5).map(l => l.id);
+      await supabase.from('notification_logs').delete().in('id', idsToDelete);
+    }
   };
 
   const sendNotifications = async () => {
