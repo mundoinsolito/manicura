@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase, Settings, SectionColors } from '@/lib/supabase';
+import { useTenant } from '@/contexts/TenantContext';
 
 const defaultSectionColors: SectionColors = {
   background: '#ffffff',
@@ -15,9 +16,9 @@ const defaultSectionColors: SectionColors = {
 };
 
 const defaultFeatureTags = [
-  { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad para el mejor resultado', enabled: true },
-  { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única, cada servicio es especial', enabled: true },
-  { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos desde tu celular', enabled: true },
+  { id: '1', title: 'Calidad Premium', description: 'Productos de primera calidad', enabled: true },
+  { id: '2', title: 'Atención Personalizada', description: 'Cada clienta es única', enabled: true },
+  { id: '3', title: 'Reserva Fácil', description: 'Agenda tu cita en segundos', enabled: true },
 ];
 
 const defaultSettings: Settings = {
@@ -43,22 +44,28 @@ const defaultSettings: Settings = {
 export { defaultSectionColors };
 
 export function useSettings() {
+  const { tenantId } = useTenant();
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchSettings();
-  }, []);
+  }, [tenantId]);
 
   async function fetchSettings() {
+    if (!tenantId) {
+      setSettings(defaultSettings);
+      setLoading(false);
+      return;
+    }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('settings')
-        .select('*')
+        .select('*') as any)
+        .eq('tenant_id', tenantId)
         .single();
 
       if (error) {
-        console.log('Settings not found, using defaults');
         setSettings(defaultSettings);
       } else if (data) {
         setSettings({
@@ -79,16 +86,17 @@ export function useSettings() {
 
   async function updateSettings(updates: Partial<Settings>) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('settings')
         .upsert({
-          id: '1',
+          id: tenantId || '1',
+          tenant_id: tenantId,
           ...settings,
           ...updates,
           updated_at: new Date().toISOString(),
-        })
+        } as any)
         .select()
-        .single();
+        .single() as any);
 
       if (error) throw error;
       if (data) setSettings({

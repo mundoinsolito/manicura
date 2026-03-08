@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, Service } from '@/lib/supabase';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function useServices() {
+  const { tenantId } = useTenant();
   const [services, setServices] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchServices = useCallback(async () => {
+    if (!tenantId) { setLoading(false); return; }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('services')
-        .select('*')
+        .select('*') as any)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: true });
-
       if (error) throw error;
       setServices(data || []);
     } catch (error) {
@@ -19,20 +22,17 @@ export function useServices() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
-  useEffect(() => {
-    fetchServices();
-  }, [fetchServices]);
+  useEffect(() => { fetchServices(); }, [fetchServices]);
 
   async function addService(service: Omit<Service, 'id' | 'created_at'>) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('services')
-        .insert(service)
+        .insert({ ...service, tenant_id: tenantId } as any)
         .select()
-        .single();
-
+        .single() as any);
       if (error) throw error;
       if (data) setServices([...services, data]);
       return { success: true, data };
@@ -50,11 +50,8 @@ export function useServices() {
         .eq('id', id)
         .select()
         .single();
-
       if (error) throw error;
-      if (data) {
-        setServices(services.map(s => s.id === id ? data : s));
-      }
+      if (data) setServices(services.map(s => s.id === id ? data : s));
       return { success: true, data };
     } catch (error) {
       console.error('Error updating service:', error);
@@ -64,11 +61,7 @@ export function useServices() {
 
   async function deleteService(id: string) {
     try {
-      const { error } = await supabase
-        .from('services')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('services').delete().eq('id', id);
       if (error) throw error;
       setServices(services.filter(s => s.id !== id));
       return { success: true };
@@ -78,12 +71,5 @@ export function useServices() {
     }
   }
 
-  return { 
-    services, 
-    loading, 
-    addService, 
-    updateService, 
-    deleteService, 
-    refetch: fetchServices 
-  };
+  return { services, loading, addService, updateService, deleteService, refetch: fetchServices };
 }

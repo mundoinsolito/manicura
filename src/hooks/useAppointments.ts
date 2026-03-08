@@ -1,22 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, Appointment } from '@/lib/supabase';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function useAppointments() {
+  const { tenantId } = useTenant();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAppointments = useCallback(async () => {
+    if (!tenantId) { setLoading(false); return; }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('appointments')
-        .select(`
-          *,
-          client:clients(*),
-          service:services(*)
-        `)
+        .select('*, client:clients(*), service:services(*)') as any)
+        .eq('tenant_id', tenantId)
         .order('date', { ascending: true })
         .order('time', { ascending: true });
-
       if (error) throw error;
       setAppointments((data || []) as Appointment[]);
     } catch (error) {
@@ -24,24 +23,17 @@ export function useAppointments() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
-  useEffect(() => {
-    fetchAppointments();
-  }, [fetchAppointments]);
+  useEffect(() => { fetchAppointments(); }, [fetchAppointments]);
 
   async function addAppointment(appointment: Omit<Appointment, 'id' | 'created_at' | 'client' | 'service'>) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('appointments')
-        .insert(appointment)
-        .select(`
-          *,
-          client:clients(*),
-          service:services(*)
-        `)
-        .single();
-
+        .insert({ ...appointment, tenant_id: tenantId } as any)
+        .select('*, client:clients(*), service:services(*)')
+        .single() as any);
       if (error) throw error;
       if (data) setAppointments([...appointments, data as Appointment]);
       return { success: true, data };
@@ -53,21 +45,14 @@ export function useAppointments() {
 
   async function updateAppointment(id: string, updates: Partial<Appointment>) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('appointments')
         .update(updates)
         .eq('id', id)
-        .select(`
-          *,
-          client:clients(*),
-          service:services(*)
-        `)
-        .single();
-
+        .select('*, client:clients(*), service:services(*)')
+        .single() as any);
       if (error) throw error;
-      if (data) {
-        setAppointments(appointments.map(a => a.id === id ? (data as Appointment) : a));
-      }
+      if (data) setAppointments(appointments.map(a => a.id === id ? (data as Appointment) : a));
       return { success: true, data };
     } catch (error) {
       console.error('Error updating appointment:', error);
@@ -77,11 +62,7 @@ export function useAppointments() {
 
   async function deleteAppointment(id: string) {
     try {
-      const { error } = await supabase
-        .from('appointments')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('appointments').delete().eq('id', id);
       if (error) throw error;
       setAppointments(appointments.filter(a => a.id !== id));
       return { success: true };
@@ -92,30 +73,15 @@ export function useAppointments() {
   }
 
   async function getAppointmentsForDate(date: string) {
-    const { data, error } = await supabase
+    const { data, error } = await (supabase
       .from('appointments')
-      .select(`
-        *,
-        client:clients(*),
-        service:services(*)
-      `)
+      .select('*, client:clients(*), service:services(*)') as any)
       .eq('date', date)
+      .eq('tenant_id', tenantId)
       .order('time', { ascending: true });
-
-    if (error) {
-      console.error('Error fetching appointments for date:', error);
-      return [];
-    }
+    if (error) return [];
     return data || [];
   }
 
-  return { 
-    appointments, 
-    loading, 
-    addAppointment, 
-    updateAppointment, 
-    deleteAppointment, 
-    getAppointmentsForDate,
-    refetch: fetchAppointments 
-  };
+  return { appointments, loading, addAppointment, updateAppointment, deleteAppointment, getAppointmentsForDate, refetch: fetchAppointments };
 }

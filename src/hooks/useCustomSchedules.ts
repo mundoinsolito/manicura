@@ -1,20 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, CustomSchedule } from '@/lib/supabase';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function useCustomSchedules() {
+  const { tenantId } = useTenant();
   const [customSchedules, setCustomSchedules] = useState<CustomSchedule[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchCustomSchedules = useCallback(async () => {
+    if (!tenantId) { setLoading(false); return; }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('custom_schedules')
-        .select('*')
+        .select('*') as any)
+        .eq('tenant_id', tenantId)
         .order('date', { ascending: true });
-
       if (error) {
-        // Table might not exist yet
-        console.log('Custom schedules table not available yet');
         setCustomSchedules([]);
       } else {
         setCustomSchedules((data || []) as CustomSchedule[]);
@@ -24,30 +25,21 @@ export function useCustomSchedules() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
-  useEffect(() => {
-    fetchCustomSchedules();
-  }, [fetchCustomSchedules]);
+  useEffect(() => { fetchCustomSchedules(); }, [fetchCustomSchedules]);
 
   async function setScheduleForDate(date: string, hours: string[]) {
     try {
-      // Check if schedule exists for this date
       const existing = customSchedules.find(cs => cs.date === date);
-
       if (hours.length === 0) {
-        // Remove custom schedule
         if (existing) {
-          const { error } = await supabase
-            .from('custom_schedules')
-            .delete()
-            .eq('id', existing.id);
+          const { error } = await supabase.from('custom_schedules').delete().eq('id', existing.id);
           if (error) throw error;
           setCustomSchedules(customSchedules.filter(cs => cs.id !== existing.id));
         }
         return { success: true };
       }
-
       if (existing) {
         const { data, error } = await supabase
           .from('custom_schedules')
@@ -58,11 +50,11 @@ export function useCustomSchedules() {
         if (error) throw error;
         if (data) setCustomSchedules(customSchedules.map(cs => cs.id === existing.id ? (data as CustomSchedule) : cs));
       } else {
-        const { data, error } = await supabase
+        const { data, error } = await (supabase
           .from('custom_schedules')
-          .insert({ date, hours })
+          .insert({ date, hours, tenant_id: tenantId } as any)
           .select()
-          .single();
+          .single() as any);
         if (error) throw error;
         if (data) setCustomSchedules([...customSchedules, data as CustomSchedule]);
       }
@@ -78,11 +70,5 @@ export function useCustomSchedules() {
     return schedule ? schedule.hours : null;
   }
 
-  return {
-    customSchedules,
-    loading,
-    setScheduleForDate,
-    getScheduleForDate,
-    refetch: fetchCustomSchedules,
-  };
+  return { customSchedules, loading, setScheduleForDate, getScheduleForDate, refetch: fetchCustomSchedules };
 }
