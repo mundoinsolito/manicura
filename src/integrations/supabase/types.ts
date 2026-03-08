@@ -236,6 +236,42 @@ export type Database = {
           },
         ]
       }
+      platform_settings: {
+        Row: {
+          brand_logo_url: string | null
+          brand_name: string
+          cta_text: string
+          footer_text: string
+          hero_image_url: string | null
+          hero_subtitle: string
+          hero_title: string
+          id: string
+          updated_at: string | null
+        }
+        Insert: {
+          brand_logo_url?: string | null
+          brand_name?: string
+          cta_text?: string
+          footer_text?: string
+          hero_image_url?: string | null
+          hero_subtitle?: string
+          hero_title?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Update: {
+          brand_logo_url?: string | null
+          brand_name?: string
+          cta_text?: string
+          footer_text?: string
+          hero_image_url?: string | null
+          hero_subtitle?: string
+          hero_title?: string
+          id?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       promotions: {
         Row: {
           created_at: string | null
