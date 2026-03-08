@@ -89,6 +89,7 @@ const App = () => (
             <Route path="/superadmin" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminDashboard /></ProtectedRoute>} />
             <Route path="/superadmin/tenants" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminTenants /></ProtectedRoute>} />
             <Route path="/superadmin/plans" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminPlans /></ProtectedRoute>} />
+            <Route path="/superadmin/settings" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminSettings /></ProtectedRoute>} />
 
             {/* Tenant public pages - MUST be last (catch-all slug) */}
             <Route path="/:slug" element={<TenantRoute><Index /></TenantRoute>} />
