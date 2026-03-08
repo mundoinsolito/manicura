@@ -1,10 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
+// Re-export supabase client from the canonical location
+export { supabase } from '@/integrations/supabase/client';
 
-const supabaseUrl = 'https://reaywgxygxnuxoqtegjs.supabase.co';
-const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJlYXl3Z3h5Z3hudXhvcXRlZ2pzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAxODMwMTAsImV4cCI6MjA4NTc1OTAxMH0.XtJ9mWvM24Q8P9pW0ocnYZN-yigafDr1ICEVU9dDANg';
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-
+// Type exports for the application
 export type Service = {
   id: string;
   name: string;

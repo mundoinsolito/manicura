@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import { DynamicThemeProvider } from "@/components/DynamicThemeProvider";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Services from "./pages/Services";
 import Booking from "./pages/Booking";
@@ -39,14 +40,14 @@ const App = () => (
               
               {/* Admin Routes */}
               <Route path="/admin" element={<AdminLogin />} />
-              <Route path="/admin/dashboard" element={<AdminDashboard />} />
-              <Route path="/admin/servicios" element={<AdminServices />} />
-              <Route path="/admin/agenda" element={<AdminAgenda />} />
-              <Route path="/admin/clientes" element={<AdminClients />} />
-              <Route path="/admin/finanzas" element={<AdminFinances />} />
-              <Route path="/admin/promociones" element={<AdminPromotions />} />
-              <Route path="/admin/configuracion" element={<AdminSettings />} />
-              <Route path="/admin/notificaciones" element={<AdminNotifications />} />
+              <Route path="/admin/dashboard" element={<ProtectedRoute><AdminDashboard /></ProtectedRoute>} />
+              <Route path="/admin/servicios" element={<ProtectedRoute><AdminServices /></ProtectedRoute>} />
+              <Route path="/admin/agenda" element={<ProtectedRoute><AdminAgenda /></ProtectedRoute>} />
+              <Route path="/admin/clientes" element={<ProtectedRoute><AdminClients /></ProtectedRoute>} />
+              <Route path="/admin/finanzas" element={<ProtectedRoute><AdminFinances /></ProtectedRoute>} />
+              <Route path="/admin/promociones" element={<ProtectedRoute><AdminPromotions /></ProtectedRoute>} />
+              <Route path="/admin/configuracion" element={<ProtectedRoute><AdminSettings /></ProtectedRoute>} />
+              <Route path="/admin/notificaciones" element={<ProtectedRoute><AdminNotifications /></ProtectedRoute>} />
               
               <Route path="*" element={<NotFound />} />
             </Routes>

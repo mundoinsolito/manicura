@@ -17,7 +17,7 @@ export function useCustomSchedules() {
         console.log('Custom schedules table not available yet');
         setCustomSchedules([]);
       } else {
-        setCustomSchedules(data || []);
+        setCustomSchedules((data || []) as CustomSchedule[]);
       }
     } catch (error) {
       console.error('Error fetching custom schedules:', error);
@@ -56,7 +56,7 @@ export function useCustomSchedules() {
           .select()
           .single();
         if (error) throw error;
-        if (data) setCustomSchedules(customSchedules.map(cs => cs.id === existing.id ? data : cs));
+        if (data) setCustomSchedules(customSchedules.map(cs => cs.id === existing.id ? (data as CustomSchedule) : cs));
       } else {
         const { data, error } = await supabase
           .from('custom_schedules')
@@ -64,7 +64,7 @@ export function useCustomSchedules() {
           .select()
           .single();
         if (error) throw error;
-        if (data) setCustomSchedules([...customSchedules, data]);
+        if (data) setCustomSchedules([...customSchedules, data as CustomSchedule]);
       }
       return { success: true };
     } catch (error) {

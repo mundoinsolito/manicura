@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useSettings } from '@/hooks/useSettings';
-import { Calendar, Settings as SettingsIcon } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function Header() {
@@ -38,11 +38,6 @@ export function Header() {
               <Button variant="default" size="sm" className="accent-gradient border-0 shadow-soft">
                 <Calendar className="w-4 h-4 mr-2" />
                 Reservar
-              </Button>
-            </Link>
-            <Link to="/admin">
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-foreground">
-                <SettingsIcon className="w-5 h-5" />
               </Button>
             </Link>
           </nav>

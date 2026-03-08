@@ -87,10 +87,10 @@ const Index = () => {
       </section>
 
       {/* Features */}
-      <section className="py-16 bg-background">
-        <div className="container mx-auto px-4">
-          {enabledFeatureTags.length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {enabledFeatureTags.length > 0 && (
+        <section className="py-16 bg-background">
+          <div className="container mx-auto px-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
               {enabledFeatureTags.map((tag, index) => {
                 const IconComponent = featureIcons[index % featureIcons.length];
                 return (
@@ -107,10 +107,10 @@ const Index = () => {
                   </div>
                 );
               })}
+            </div>
           </div>
-          )}
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* Promotions */}
       {activePromotions.length > 0 && (
