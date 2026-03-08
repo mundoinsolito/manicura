@@ -236,39 +236,78 @@ export type Database = {
           },
         ]
       }
+      payment_methods: {
+        Row: {
+          created_at: string | null
+          details: Json
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+          type: string
+        }
+        Insert: {
+          created_at?: string | null
+          details?: Json
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+          type: string
+        }
+        Update: {
+          created_at?: string | null
+          details?: Json
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+          type?: string
+        }
+        Relationships: []
+      }
       platform_settings: {
         Row: {
           brand_logo_url: string | null
           brand_name: string
           cta_text: string
+          faq_items: Json | null
           footer_text: string
           hero_image_url: string | null
           hero_subtitle: string
           hero_title: string
           id: string
+          support_email: string | null
           updated_at: string | null
+          whatsapp_support: string | null
         }
         Insert: {
           brand_logo_url?: string | null
           brand_name?: string
           cta_text?: string
+          faq_items?: Json | null
           footer_text?: string
           hero_image_url?: string | null
           hero_subtitle?: string
           hero_title?: string
           id?: string
+          support_email?: string | null
           updated_at?: string | null
+          whatsapp_support?: string | null
         }
         Update: {
           brand_logo_url?: string | null
           brand_name?: string
           cta_text?: string
+          faq_items?: Json | null
           footer_text?: string
           hero_image_url?: string | null
           hero_subtitle?: string
           hero_title?: string
           id?: string
+          support_email?: string | null
           updated_at?: string | null
+          whatsapp_support?: string | null
         }
         Relationships: []
       }
@@ -521,6 +560,41 @@ export type Database = {
         }
         Relationships: []
       }
+      support_messages: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_read: boolean
+          message: string
+          sender_type: string
+          tenant_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean
+          message: string
+          sender_type: string
+          tenant_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_read?: boolean
+          message?: string
+          sender_type?: string
+          tenant_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_tenant_id_fkey"
+            columns: ["tenant_id"]
+            isOneToOne: false
+            referencedRelation: "tenants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tenant_subscriptions: {
         Row: {
           approved_by: string | null
@@ -579,6 +653,7 @@ export type Database = {
           created_at: string
           id: string
           logo_url: string | null
+          notes: string | null
           owner_id: string
           slug: string
           status: string
@@ -590,6 +665,7 @@ export type Database = {
           created_at?: string
           id?: string
           logo_url?: string | null
+          notes?: string | null
           owner_id: string
           slug: string
           status?: string
@@ -601,6 +677,7 @@ export type Database = {
           created_at?: string
           id?: string
           logo_url?: string | null
+          notes?: string | null
           owner_id?: string
           slug?: string
           status?: string
