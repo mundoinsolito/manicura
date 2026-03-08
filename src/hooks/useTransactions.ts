@@ -13,7 +13,7 @@ export function useTransactions() {
         .order('date', { ascending: false });
 
       if (error) throw error;
-      setTransactions(data || []);
+      setTransactions((data || []) as Transaction[]);
     } catch (error) {
       console.error('Error fetching transactions:', error);
     } finally {
@@ -34,7 +34,7 @@ export function useTransactions() {
         .single();
 
       if (error) throw error;
-      if (data) setTransactions([data, ...transactions]);
+      if (data) setTransactions([data as Transaction, ...transactions]);
       return { success: true, data };
     } catch (error) {
       console.error('Error adding transaction:', error);

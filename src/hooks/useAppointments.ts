@@ -18,7 +18,7 @@ export function useAppointments() {
         .order('time', { ascending: true });
 
       if (error) throw error;
-      setAppointments(data || []);
+      setAppointments((data || []) as Appointment[]);
     } catch (error) {
       console.error('Error fetching appointments:', error);
     } finally {
@@ -43,7 +43,7 @@ export function useAppointments() {
         .single();
 
       if (error) throw error;
-      if (data) setAppointments([...appointments, data]);
+      if (data) setAppointments([...appointments, data as Appointment]);
       return { success: true, data };
     } catch (error) {
       console.error('Error adding appointment:', error);
@@ -66,7 +66,7 @@ export function useAppointments() {
 
       if (error) throw error;
       if (data) {
-        setAppointments(appointments.map(a => a.id === id ? data : a));
+        setAppointments(appointments.map(a => a.id === id ? (data as Appointment) : a));
       }
       return { success: true, data };
     } catch (error) {

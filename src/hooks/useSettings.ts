@@ -64,9 +64,9 @@ export function useSettings() {
         setSettings({
           ...defaultSettings,
           ...data,
-          schedule_mode: data.schedule_mode || 'interval',
-          manual_hours: data.manual_hours || [],
-          section_colors: data.section_colors || null,
+          schedule_mode: (data.schedule_mode || 'interval') as Settings['schedule_mode'],
+          manual_hours: (data.manual_hours || []) as string[],
+          section_colors: (data.section_colors || null) as SectionColors | null,
         });
       }
     } catch (error) {
@@ -93,9 +93,9 @@ export function useSettings() {
       if (data) setSettings({
         ...defaultSettings,
         ...data,
-        schedule_mode: data.schedule_mode || 'interval',
-        manual_hours: data.manual_hours || [],
-        section_colors: data.section_colors || null,
+        schedule_mode: (data.schedule_mode || 'interval') as Settings['schedule_mode'],
+        manual_hours: (data.manual_hours || []) as string[],
+        section_colors: (data.section_colors || null) as SectionColors | null,
       });
       return { success: true };
     } catch (error) {

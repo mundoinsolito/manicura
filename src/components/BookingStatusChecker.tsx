@@ -54,7 +54,7 @@ export function BookingStatusChecker() {
         .order('date', { ascending: false })
         .limit(10);
 
-      setAppointments(apts || []);
+      setAppointments((apts || []) as Appointment[]);
     } catch (error) {
       console.error('Error searching:', error);
       toast.error('Error al buscar');
