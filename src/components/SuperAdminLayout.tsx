@@ -4,12 +4,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
-import { LayoutDashboard, Users, CreditCard, LogOut, Menu, Shield } from 'lucide-react';
+import { LayoutDashboard, Users, CreditCard, LogOut, Menu, Shield, Settings } from 'lucide-react';
 
 const navItems = [
   { to: '/superadmin', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/superadmin/tenants', label: 'Tenants', icon: Users },
   { to: '/superadmin/plans', label: 'Planes', icon: CreditCard },
+  { to: '/superadmin/settings', label: 'Plataforma', icon: Settings },
 ];
 
 export function SuperAdminLayout({ children }: { children: ReactNode }) {

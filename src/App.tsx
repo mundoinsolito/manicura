@@ -33,6 +33,7 @@ import AdminNotifications from "./pages/AdminNotifications";
 import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import SuperAdminTenants from "./pages/SuperAdminTenants";
 import SuperAdminPlans from "./pages/SuperAdminPlans";
+import SuperAdminSettings from "./pages/SuperAdminSettings";
 
 import NotFound from "./pages/NotFound";
 
