@@ -38,7 +38,7 @@ export default function SuperAdminPlans() {
   });
 
   const fetchPlans = async () => {
-    const { data } = await (supabase.from('subscription_plans') as any)
+    const { data } = await (supabase as any).from('subscription_plans')
       .select('*')
       .order('price', { ascending: true });
     if (data) {
@@ -86,9 +86,9 @@ export default function SuperAdminPlans() {
 
     let error;
     if (editing) {
-      ({ error } = await (supabase.from('subscription_plans') as any).update(payload).eq('id', editing.id));
+      ({ error } = await (supabase as any).from('subscription_plans').update(payload).eq('id', editing.id));
     } else {
-      ({ error } = await (supabase.from('subscription_plans') as any).insert(payload));
+      ({ error } = await (supabase as any).from('subscription_plans').insert(payload));
     }
 
     if (error) {

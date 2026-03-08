@@ -34,7 +34,7 @@ export default function SuperAdminTenants() {
   const [loading, setLoading] = useState(true);
 
   const fetchTenants = async () => {
-    const { data } = await (supabase.from('tenants') as any)
+    const { data } = await (supabase as any).from('tenants')
       .select('*')
       .order('created_at', { ascending: false });
     setTenants((data || []) as TenantRow[]);
@@ -44,7 +44,7 @@ export default function SuperAdminTenants() {
   useEffect(() => { fetchTenants(); }, []);
 
   const updateStatus = async (id: string, status: string) => {
-    const { error } = await (supabase.from('tenants') as any)
+    const { error } = await (supabase as any).from('tenants')
       .update({ status })
       .eq('id', id);
     if (error) {

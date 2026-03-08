@@ -45,7 +45,7 @@ export default function Register() {
     setLoading(true);
     try {
       // Check slug availability
-      const { data: existing } = await (supabase.from('tenants') as any)
+      const { data: existing } = await (supabase as any).from('tenants')
         .select('id')
         .eq('slug', form.slug)
         .single();

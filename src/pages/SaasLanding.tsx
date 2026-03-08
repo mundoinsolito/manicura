@@ -36,7 +36,7 @@ export default function SaasLanding() {
   const [plans, setPlans] = useState<Plan[]>([]);
 
   useEffect(() => {
-    (supabase.from('subscription_plans') as any)
+    (supabase as any).from('subscription_plans')
       .select('*')
       .eq('is_active', true)
       .order('price', { ascending: true })

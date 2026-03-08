@@ -49,7 +49,7 @@ export function TenantProvider({
       setNotFound(false);
 
       try {
-        let query = (supabase.from('tenants') as any).select('*');
+        let query = (supabase as any).from('tenants').select('*');
 
         if (source === 'slug' && slug) {
           query = query.eq('slug', slug);

@@ -8,7 +8,7 @@ export default function SuperAdminDashboard() {
   const [stats, setStats] = useState({ total: 0, trial: 0, active: 0, suspended: 0 });
 
   useEffect(() => {
-    (supabase.from('tenants') as any).select('status').then(({ data }: any) => {
+    (supabase as any).from('tenants').select('status').then(({ data }: any) => {
       if (data) {
         setStats({
           total: data.length,
