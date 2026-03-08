@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 import {
   Sparkles, Calendar, Users, BarChart3, Shield, Smartphone,
   Palette, Check, ArrowRight, Star
@@ -18,22 +19,23 @@ interface Plan {
 }
 
 const features = [
-  { icon: Calendar, title: 'Agenda Online', desc: 'Tus clientas reservan citas 24/7 desde su celular' },
-  { icon: Users, title: 'Gestión de Clientes', desc: 'Historial, preferencias y datos de cada clienta' },
-  { icon: BarChart3, title: 'Finanzas Claras', desc: 'Ingresos, gastos y ganancia neta en un solo lugar' },
-  { icon: Palette, title: 'Tu Marca', desc: 'Personaliza colores, logo y portada de tu página' },
-  { icon: Smartphone, title: 'Tu Página Web', desc: 'Cada negocio tiene su propia URL profesional' },
-  { icon: Shield, title: 'Datos Seguros', desc: 'Tus datos están protegidos con seguridad empresarial' },
+  { icon: Calendar, title: 'Agenda Online', desc: 'Reservas 24/7 desde el celular' },
+  { icon: Users, title: 'Clientes', desc: 'Historial y preferencias' },
+  { icon: BarChart3, title: 'Finanzas', desc: 'Ingresos y gastos claros' },
+  { icon: Palette, title: 'Tu Marca', desc: 'Colores, logo y portada' },
+  { icon: Smartphone, title: 'Página Web', desc: 'URL profesional propia' },
+  { icon: Shield, title: 'Seguridad', desc: 'Datos 100% protegidos' },
 ];
 
 const steps = [
-  { num: '1', title: 'Regístrate', desc: 'Crea tu cuenta en menos de 1 minuto' },
-  { num: '2', title: 'Personaliza', desc: 'Sube tu logo, agrega servicios y horarios' },
-  { num: '3', title: 'Recibe citas', desc: 'Comparte tu página y empieza a recibir reservas' },
+  { num: '1', title: 'Regístrate', desc: 'En menos de 1 minuto' },
+  { num: '2', title: 'Personaliza', desc: 'Logo, servicios y horarios' },
+  { num: '3', title: 'Recibe citas', desc: 'Comparte y listo' },
 ];
 
 export default function SaasLanding() {
   const [plans, setPlans] = useState<Plan[]>([]);
+  const { settings: platform } = usePlatformSettings();
 
   useEffect(() => {
     (supabase as any).from('subscription_plans')
@@ -50,87 +52,105 @@ export default function SaasLanding() {
       });
   }, []);
 
+  const brandName = platform?.brand_name || 'NailsPro';
+  const heroTitle = platform?.hero_title || 'Tu negocio de uñas, digitalizado';
+  const heroSubtitle = platform?.hero_subtitle || 'La plataforma todo-en-uno para manicuristas profesionales.';
+  const ctaText = platform?.cta_text || 'Crear mi cuenta gratis';
+  const footerText = platform?.footer_text || `© ${new Date().getFullYear()} NailsPro. Todos los derechos reservados.`;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
-      <header className="fixed top-0 left-0 right-0 z-50 glass-effect border-b border-border/50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-full accent-gradient flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <span className="font-display text-xl font-bold">NailsPro</span>
+            {platform?.brand_logo_url ? (
+              <img src={platform.brand_logo_url} className="w-8 h-8 rounded-full object-cover" alt={brandName} />
+            ) : (
+              <div className="w-8 h-8 rounded-full accent-gradient flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-primary-foreground" />
+              </div>
+            )}
+            <span className="font-display text-lg font-bold">{brandName}</span>
           </div>
-          <nav className="flex items-center gap-3">
+          <nav className="flex items-center gap-2">
             <Link to="/login">
               <Button variant="ghost" size="sm">Iniciar Sesión</Button>
             </Link>
             <Link to="/registro">
-              <Button size="sm" className="accent-gradient border-0">Comenzar Gratis</Button>
+              <Button size="sm" className="accent-gradient border-0">{ctaText}</Button>
             </Link>
           </nav>
         </div>
       </header>
 
       {/* Hero */}
-      <section className="relative min-h-[90vh] flex items-center overflow-hidden pt-20">
-        <div className="absolute inset-0 hero-gradient" />
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-float" />
-          <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
-        </div>
+      <section className="relative min-h-[70vh] flex items-center overflow-hidden pt-16">
+        {platform?.hero_image_url ? (
+          <>
+            <div className="absolute inset-0">
+              <img src={platform.hero_image_url} className="w-full h-full object-cover" alt="Hero" />
+              <div className="absolute inset-0 bg-background/70 backdrop-blur-sm" />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="absolute inset-0 hero-gradient" />
+            <div className="absolute inset-0 overflow-hidden pointer-events-none">
+              <div className="absolute top-20 left-10 w-64 h-64 bg-primary/10 rounded-full blur-3xl animate-float" />
+              <div className="absolute bottom-10 right-10 w-80 h-80 bg-accent/10 rounded-full blur-3xl animate-float" style={{ animationDelay: '2s' }} />
+            </div>
+          </>
+        )}
 
-        <div className="container mx-auto px-4 py-20 relative z-10">
-          <div className="max-w-3xl mx-auto text-center">
-            <Badge variant="secondary" className="mb-6 px-4 py-2 text-sm">
-              <Star className="w-4 h-4 mr-1" /> 14 días gratis · Sin tarjeta de crédito
+        <div className="container mx-auto px-4 py-12 relative z-10">
+          <div className="max-w-2xl mx-auto text-center">
+            <Badge variant="secondary" className="mb-4 px-3 py-1 text-xs">
+              <Star className="w-3 h-3 mr-1" /> 14 días gratis · Sin tarjeta
             </Badge>
 
-            <h1 className="font-display text-5xl md:text-7xl font-bold mb-6 animate-fade-up">
-              Tu negocio de uñas,{' '}
-              <span className="text-gradient">digitalizado</span>
+            <h1 className="font-display text-4xl md:text-6xl font-bold mb-4 animate-fade-up leading-tight">
+              {heroTitle.includes(',') ? (
+                <>
+                  {heroTitle.split(',')[0]},{' '}
+                  <span className="text-gradient">{heroTitle.split(',').slice(1).join(',').trim()}</span>
+                </>
+              ) : (
+                <span className="text-gradient">{heroTitle}</span>
+              )}
             </h1>
 
-            <p className="text-lg md:text-xl text-muted-foreground mb-10 animate-fade-up" style={{ animationDelay: '0.1s' }}>
-              La plataforma todo-en-uno para manicuristas profesionales.
-              Agenda, clientes, finanzas y tu propia página web en minutos.
+            <p className="text-base md:text-lg text-muted-foreground mb-8 animate-fade-up max-w-xl mx-auto" style={{ animationDelay: '0.1s' }}>
+              {heroSubtitle}
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up" style={{ animationDelay: '0.2s' }}>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 animate-fade-up" style={{ animationDelay: '0.2s' }}>
               <Link to="/registro">
-                <Button size="lg" className="accent-gradient border-0 shadow-elevated px-8 text-lg">
-                  Crear mi cuenta gratis
+                <Button size="lg" className="accent-gradient border-0 shadow-elevated px-8">
+                  {ctaText}
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </Link>
             </div>
           </div>
         </div>
-
-        <div className="absolute bottom-0 left-0 right-0 h-24 bg-gradient-to-t from-background to-transparent" />
       </section>
 
       {/* Features */}
-      <section className="py-20 bg-background">
+      <section className="py-12 bg-background">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
-              Todo lo que necesitas para crecer
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Herramientas profesionales diseñadas especialmente para negocios de manicura
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <h2 className="font-display text-2xl md:text-3xl font-bold text-center mb-8">
+            Todo lo que necesitas
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             {features.map((f, i) => (
-              <Card key={i} className="card-gradient shadow-card hover:shadow-elevated transition-shadow">
-                <CardContent className="pt-6">
-                  <div className="w-12 h-12 rounded-xl accent-gradient flex items-center justify-center mb-4 shadow-soft">
-                    <f.icon className="w-6 h-6 text-primary-foreground" />
+              <Card key={i} className="card-gradient shadow-card hover:shadow-elevated transition-shadow text-center">
+                <CardContent className="pt-4 pb-3 px-3">
+                  <div className="w-10 h-10 mx-auto rounded-lg accent-gradient flex items-center justify-center mb-2 shadow-soft">
+                    <f.icon className="w-5 h-5 text-primary-foreground" />
                   </div>
-                  <h3 className="font-display text-lg font-semibold mb-2">{f.title}</h3>
-                  <p className="text-muted-foreground text-sm">{f.desc}</p>
+                  <h3 className="font-display text-sm font-semibold mb-0.5">{f.title}</h3>
+                  <p className="text-muted-foreground text-xs">{f.desc}</p>
                 </CardContent>
               </Card>
             ))}
@@ -138,23 +158,25 @@ export default function SaasLanding() {
         </div>
       </section>
 
-      {/* How it works */}
-      <section className="py-20 bg-card">
+      {/* Steps */}
+      <section className="py-10 bg-card">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
-              Empieza en 3 pasos
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-3xl mx-auto">
+          <h2 className="font-display text-2xl md:text-3xl font-bold text-center mb-6">
+            Empieza en 3 pasos
+          </h2>
+          <div className="flex flex-col md:flex-row items-center justify-center gap-4 md:gap-8 max-w-2xl mx-auto">
             {steps.map((s, i) => (
-              <div key={i} className="text-center">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-full accent-gradient flex items-center justify-center shadow-soft">
-                  <span className="text-2xl font-bold text-primary-foreground">{s.num}</span>
+              <div key={i} className="flex items-center gap-3 md:flex-col md:text-center">
+                <div className="w-12 h-12 shrink-0 rounded-full accent-gradient flex items-center justify-center shadow-soft">
+                  <span className="text-lg font-bold text-primary-foreground">{s.num}</span>
                 </div>
-                <h3 className="font-display text-lg font-semibold mb-2">{s.title}</h3>
-                <p className="text-muted-foreground text-sm">{s.desc}</p>
+                <div>
+                  <h3 className="font-display text-sm font-semibold">{s.title}</h3>
+                  <p className="text-muted-foreground text-xs">{s.desc}</p>
+                </div>
+                {i < steps.length - 1 && (
+                  <ArrowRight className="hidden md:block w-5 h-5 text-muted-foreground mx-2" />
+                )}
               </div>
             ))}
           </div>
@@ -162,41 +184,38 @@ export default function SaasLanding() {
       </section>
 
       {/* Pricing */}
-      <section id="precios" className="py-20 bg-background">
+      <section id="precios" className="py-12 bg-background">
         <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">
-              Planes simples y transparentes
-            </h2>
-            <p className="text-muted-foreground">
-              Empieza gratis, crece a tu ritmo
-            </p>
-          </div>
+          <h2 className="font-display text-2xl md:text-3xl font-bold text-center mb-2">
+            Planes simples
+          </h2>
+          <p className="text-muted-foreground text-center text-sm mb-8">
+            Empieza gratis, crece a tu ritmo
+          </p>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl mx-auto">
             {plans.map((plan, i) => (
               <Card
                 key={plan.id}
-                className={`relative ${i === 1 ? 'border-primary shadow-elevated scale-105' : 'shadow-card'}`}
+                className={`relative ${i === 1 ? 'border-primary shadow-elevated md:scale-105' : 'shadow-card'}`}
               >
                 {i === 1 && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <Badge className="accent-gradient border-0">Más Popular</Badge>
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                    <Badge className="accent-gradient border-0 text-xs">Popular</Badge>
                   </div>
                 )}
-                <CardHeader className="text-center">
-                  <CardTitle className="font-display text-xl">{plan.name}</CardTitle>
-                  <p className="text-muted-foreground text-sm">{plan.description}</p>
-                  <div className="mt-4">
-                    <span className="text-4xl font-bold">${plan.price}</span>
-                    <span className="text-muted-foreground">/mes</span>
+                <CardHeader className="text-center pb-2 pt-5">
+                  <CardTitle className="font-display text-lg">{plan.name}</CardTitle>
+                  <div className="mt-2">
+                    <span className="text-3xl font-bold">${plan.price}</span>
+                    <span className="text-muted-foreground text-sm">/mes</span>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <ul className="space-y-3 mb-6">
+                <CardContent className="pt-0 pb-5">
+                  <ul className="space-y-2 mb-4">
                     {plan.features.map((f: string, j: number) => (
-                      <li key={j} className="flex items-start gap-2 text-sm">
-                        <Check className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      <li key={j} className="flex items-start gap-1.5 text-xs">
+                        <Check className="w-3.5 h-3.5 text-primary mt-0.5 shrink-0" />
                         <span>{f}</span>
                       </li>
                     ))}
@@ -205,6 +224,7 @@ export default function SaasLanding() {
                     <Button
                       className={`w-full ${i === 1 ? 'accent-gradient border-0' : ''}`}
                       variant={i === 1 ? 'default' : 'outline'}
+                      size="sm"
                     >
                       Comenzar Gratis
                     </Button>
@@ -216,36 +236,20 @@ export default function SaasLanding() {
         </div>
       </section>
 
-      {/* CTA */}
-      <section className="py-20 hero-gradient">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="font-display text-3xl md:text-4xl font-bold mb-6">
-            ¿Lista para digitalizar tu negocio?
-          </h2>
-          <p className="text-muted-foreground mb-8 max-w-xl mx-auto">
-            Únete a cientos de manicuristas que ya gestionan sus citas de forma profesional
-          </p>
-          <Link to="/registro">
-            <Button size="lg" className="accent-gradient border-0 shadow-elevated px-10 text-lg">
-              Crear mi cuenta gratis
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </Button>
-          </Link>
-        </div>
-      </section>
-
       {/* Footer */}
-      <footer className="bg-card border-t border-border py-8">
+      <footer className="bg-card border-t border-border py-6">
         <div className="container mx-auto px-4 text-center">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-full accent-gradient flex items-center justify-center">
-              <Sparkles className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-display text-lg font-bold">NailsPro</span>
+          <div className="flex items-center justify-center gap-2 mb-2">
+            {platform?.brand_logo_url ? (
+              <img src={platform.brand_logo_url} className="w-6 h-6 rounded-full object-cover" alt={brandName} />
+            ) : (
+              <div className="w-6 h-6 rounded-full accent-gradient flex items-center justify-center">
+                <Sparkles className="w-3 h-3 text-primary-foreground" />
+              </div>
+            )}
+            <span className="font-display text-sm font-bold">{brandName}</span>
           </div>
-          <p className="text-muted-foreground text-sm">
-            © {new Date().getFullYear()} NailsPro. Todos los derechos reservados.
-          </p>
+          <p className="text-muted-foreground text-xs">{footerText}</p>
         </div>
       </footer>
     </div>
