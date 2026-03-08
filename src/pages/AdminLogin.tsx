@@ -1,43 +1,39 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Lock, Mail, ArrowLeft } from 'lucide-react';
+import { Lock, Mail, ArrowLeft, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
-  const location = useLocation();
-  const { login, isAdmin } = useAuth();
+  const { isAdmin, loading: authLoading } = useAuth();
+  const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // Redirect if already logged in - use useEffect to avoid render issues
   useEffect(() => {
-    if (isAdmin) {
+    if (!authLoading && isAdmin) {
       navigate('/admin/dashboard', { replace: true });
     }
-  }, [isAdmin, navigate]);
+  }, [isAdmin, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // Small delay for UX
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      const success = login(email, password);
+      const success = await login(email, password);
       if (success) {
         toast.success('¡Bienvenida!');
         navigate('/admin/dashboard', { replace: true });
       } else {
-        toast.error('Credenciales incorrectas');
+        toast.error('Credenciales incorrectas o sin permisos de administrador');
       }
     } catch (error) {
       console.error('Login error:', error);
@@ -47,10 +43,15 @@ export default function AdminLogin() {
     }
   };
 
-  // Don't render if already admin (prevents flash)
-  if (isAdmin) {
-    return null;
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
   }
+
+  if (isAdmin) return null;
 
   return (
     <div className="min-h-screen hero-gradient flex items-center justify-center p-4">
@@ -110,7 +111,9 @@ export default function AdminLogin() {
               className="w-full accent-gradient border-0"
               disabled={loading}
             >
-              {loading ? 'Ingresando...' : 'Ingresar'}
+              {loading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Ingresando...</>
+              ) : 'Ingresar'}
             </Button>
           </form>
         </CardContent>

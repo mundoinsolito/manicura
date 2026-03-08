@@ -1,5 +1,6 @@
 import { useSettings } from '@/hooks/useSettings';
-import { Instagram, Phone, MapPin } from 'lucide-react';
+import { Phone } from 'lucide-react';
+import { formatTime12h } from '@/lib/utils';
 
 export function Footer() {
   const { settings } = useSettings();
@@ -21,7 +22,7 @@ export function Footer() {
             <h4 className="font-semibold mb-4 text-foreground">Horarios</h4>
             <p className="text-muted-foreground text-sm">
               Lunes a Sábado<br />
-              {settings.opening_time} - {settings.closing_time}
+              {formatTime12h(settings.opening_time)} - {formatTime12h(settings.closing_time)}
             </p>
           </div>
           
