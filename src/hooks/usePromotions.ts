@@ -1,17 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase, Promotion } from '@/lib/supabase';
+import { useTenant } from '@/contexts/TenantContext';
 
 export function usePromotions() {
+  const { tenantId } = useTenant();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchPromotions = useCallback(async () => {
+    if (!tenantId) { setLoading(false); return; }
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('promotions')
-        .select('*')
+        .select('*') as any)
+        .eq('tenant_id', tenantId)
         .order('created_at', { ascending: false });
-
       if (error) throw error;
       setPromotions(data || []);
     } catch (error) {
@@ -19,20 +22,17 @@ export function usePromotions() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [tenantId]);
 
-  useEffect(() => {
-    fetchPromotions();
-  }, [fetchPromotions]);
+  useEffect(() => { fetchPromotions(); }, [fetchPromotions]);
 
-  async function addPromotion(promotion: Omit<Promotion, 'id' | 'created_at'>) {
+  async function addPromotion(promo: Omit<Promotion, 'id' | 'created_at'>) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase
         .from('promotions')
-        .insert(promotion)
+        .insert({ ...promo, tenant_id: tenantId } as any)
         .select()
-        .single();
-
+        .single() as any);
       if (error) throw error;
       if (data) setPromotions([data, ...promotions]);
       return { success: true, data };
@@ -50,11 +50,8 @@ export function usePromotions() {
         .eq('id', id)
         .select()
         .single();
-
       if (error) throw error;
-      if (data) {
-        setPromotions(promotions.map(p => p.id === id ? data : p));
-      }
+      if (data) setPromotions(promotions.map(p => p.id === id ? data : p));
       return { success: true, data };
     } catch (error) {
       console.error('Error updating promotion:', error);
@@ -64,11 +61,7 @@ export function usePromotions() {
 
   async function deletePromotion(id: string) {
     try {
-      const { error } = await supabase
-        .from('promotions')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('promotions').delete().eq('id', id);
       if (error) throw error;
       setPromotions(promotions.filter(p => p.id !== id));
       return { success: true };
@@ -81,18 +74,8 @@ export function usePromotions() {
   const activePromotions = promotions.filter(p => {
     if (!p.is_active) return false;
     const now = new Date();
-    const validFrom = new Date(p.valid_from);
-    const validUntil = new Date(p.valid_until);
-    return now >= validFrom && now <= validUntil;
+    return now >= new Date(p.valid_from) && now <= new Date(p.valid_until);
   });
 
-  return { 
-    promotions, 
-    activePromotions,
-    loading, 
-    addPromotion, 
-    updatePromotion, 
-    deletePromotion, 
-    refetch: fetchPromotions 
-  };
+  return { promotions, activePromotions, loading, addPromotion, updatePromotion, deletePromotion, refetch: fetchPromotions };
 }
