@@ -10,6 +10,9 @@ export interface PlatformSettings {
   hero_image_url: string | null;
   cta_text: string;
   footer_text: string;
+  whatsapp_support: string | null;
+  support_email: string | null;
+  faq_items: { question: string; answer: string }[] | null;
   updated_at: string | null;
 }
 
@@ -23,7 +26,13 @@ export function usePlatformSettings() {
       .select('*')
       .limit(1)
       .single();
-    if (data) setSettings(data);
+    if (data) {
+      // Parse faq_items if string
+      if (typeof data.faq_items === 'string') {
+        try { data.faq_items = JSON.parse(data.faq_items); } catch { data.faq_items = []; }
+      }
+      setSettings(data);
+    }
     setLoading(false);
   };
 
@@ -37,7 +46,12 @@ export function usePlatformSettings() {
       .eq('id', settings.id)
       .select()
       .single();
-    if (data) setSettings(data);
+    if (data) {
+      if (typeof data.faq_items === 'string') {
+        try { data.faq_items = JSON.parse(data.faq_items); } catch { data.faq_items = []; }
+      }
+      setSettings(data);
+    }
     return { data, error };
   };
 

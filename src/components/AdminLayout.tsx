@@ -3,12 +3,14 @@ import { Navigate, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/contexts/TenantContext';
 import { useSettings } from '@/hooks/useSettings';
+import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { PaymentMethodsModal } from '@/components/PaymentMethodsModal';
 import {
   LayoutDashboard, Calendar, Scissors, Users, DollarSign,
-  Settings, Tag, Bell, LogOut, Home, Menu
+  Settings, Tag, Bell, LogOut, Home, Menu, MessageSquare, CreditCard
 } from 'lucide-react';
 
 const navItems = [
@@ -26,15 +28,18 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const { isAdmin, isSuperAdmin, logout } = useAuth();
   const { tenant } = useTenant();
   const { settings } = useSettings();
+  const { settings: platformSettings } = usePlatformSettings();
   const location = useLocation();
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [payModalOpen, setPayModalOpen] = useState(false);
 
   if (!isAdmin && !isSuperAdmin) {
     return <Navigate to="/login" replace />;
   }
 
   const siteUrl = tenant ? `/${tenant.slug}` : '/';
+  const whatsappNumber = platformSettings?.whatsapp_support?.replace(/\D/g, '');
 
   const sidebarContent = (
     <>
@@ -69,6 +74,18 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       </nav>
 
       <div className="p-4 border-t border-border space-y-2">
+        {whatsappNumber && (
+          <a href={`https://wa.me/${whatsappNumber}?text=Hola, necesito soporte con mi cuenta`} target="_blank" rel="noopener noreferrer" onClick={() => setSidebarOpen(false)}>
+            <Button variant="outline" className="w-full justify-start text-green-600 hover:text-green-700 border-green-200">
+              <MessageSquare className="w-4 h-4 mr-3" />
+              Contactar Soporte
+            </Button>
+          </a>
+        )}
+        <Button variant="outline" className="w-full justify-start" onClick={() => { setPayModalOpen(true); setSidebarOpen(false); }}>
+          <CreditCard className="w-4 h-4 mr-3" />
+          ¿Cómo pagar?
+        </Button>
         <Link to={siteUrl} onClick={() => setSidebarOpen(false)}>
           <Button variant="outline" className="w-full justify-start">
             <Home className="w-4 h-4 mr-3" />
@@ -105,6 +122,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         )}
         <div className={isMobile ? 'p-4' : 'p-8'}>{children}</div>
       </main>
+      <PaymentMethodsModal open={payModalOpen} onOpenChange={setPayModalOpen} />
     </div>
   );
 }

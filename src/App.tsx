@@ -34,6 +34,9 @@ import SuperAdminDashboard from "./pages/SuperAdminDashboard";
 import SuperAdminTenants from "./pages/SuperAdminTenants";
 import SuperAdminPlans from "./pages/SuperAdminPlans";
 import SuperAdminSettings from "./pages/SuperAdminSettings";
+import SuperAdminPaymentMethods from "./pages/SuperAdminPaymentMethods";
+import SuperAdminLicenses from "./pages/SuperAdminLicenses";
+import SuperAdminMessages from "./pages/SuperAdminMessages";
 
 import NotFound from "./pages/NotFound";
 
@@ -90,6 +93,9 @@ const App = () => (
             <Route path="/superadmin/tenants" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminTenants /></ProtectedRoute>} />
             <Route path="/superadmin/plans" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminPlans /></ProtectedRoute>} />
             <Route path="/superadmin/settings" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminSettings /></ProtectedRoute>} />
+            <Route path="/superadmin/pagos" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminPaymentMethods /></ProtectedRoute>} />
+            <Route path="/superadmin/licencias" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminLicenses /></ProtectedRoute>} />
+            <Route path="/superadmin/mensajes" element={<ProtectedRoute requiredRole="super_admin"><SuperAdminMessages /></ProtectedRoute>} />
 
             {/* Tenant public pages - MUST be last (catch-all slug) */}
             <Route path="/:slug" element={<TenantRoute><Index /></TenantRoute>} />
