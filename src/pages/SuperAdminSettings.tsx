@@ -7,13 +7,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { usePlatformSettings } from '@/hooks/usePlatformSettings';
 import { useToast } from '@/hooks/use-toast';
-import { Save, Upload, Image, Type, Sparkles } from 'lucide-react';
+import { Save, Upload, Image, Type, Sparkles, Phone, Mail, HelpCircle, Plus, Trash2 } from 'lucide-react';
 
 export default function SuperAdminSettings() {
   const { settings, loading, update, uploadImage } = usePlatformSettings();
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<Record<string, string>>({});
+  const [form, setForm] = useState<Record<string, any>>({});
+  const [faqItems, setFaqItems] = useState<{ question: string; answer: string }[] | null>(null);
   const heroFileRef = useRef<HTMLInputElement>(null);
   const logoFileRef = useRef<HTMLInputElement>(null);
 
@@ -25,17 +26,21 @@ export default function SuperAdminSettings() {
     </SuperAdminLayout>
   );
 
+  const faqs = faqItems ?? (settings.faq_items || []);
   const val = (key: string) => form[key] ?? (settings as any)[key] ?? '';
 
   const handleSave = async () => {
     setSaving(true);
-    const { error } = await update(form) || {};
+    const updates: Record<string, any> = { ...form };
+    if (faqItems !== null) updates.faq_items = faqItems;
+    const { error } = await update(updates) || {};
     setSaving(false);
     if (error) {
       toast({ title: 'Error', description: 'No se pudo guardar', variant: 'destructive' });
     } else {
       toast({ title: 'Guardado', description: 'Configuración actualizada' });
       setForm({});
+      setFaqItems(null);
     }
   };
 
@@ -51,12 +56,22 @@ export default function SuperAdminSettings() {
     }
   };
 
+  const addFaq = () => setFaqItems([...faqs, { question: '', answer: '' }]);
+  const removeFaq = (i: number) => setFaqItems(faqs.filter((_, idx) => idx !== i));
+  const updateFaq = (i: number, key: 'question' | 'answer', val: string) => {
+    const updated = [...faqs];
+    updated[i] = { ...updated[i], [key]: val };
+    setFaqItems(updated);
+  };
+
+  const hasChanges = Object.keys(form).length > 0 || faqItems !== null;
+
   return (
     <SuperAdminLayout>
       <div className="space-y-6">
         <div>
           <h1 className="font-display text-2xl font-bold">Configuración de Plataforma</h1>
-          <p className="text-muted-foreground text-sm">Edita la landing page, branding y textos</p>
+          <p className="text-muted-foreground text-sm">Edita la landing page, branding, soporte y FAQ</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -88,6 +103,27 @@ export default function SuperAdminSettings() {
             </CardContent>
           </Card>
 
+          {/* Soporte */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Phone className="w-4 h-4" /> Soporte
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="flex items-center gap-1"><Phone className="w-3 h-3" /> WhatsApp de soporte</Label>
+                <Input value={val('whatsapp_support')} placeholder="+58412000000"
+                  onChange={e => setForm(f => ({ ...f, whatsapp_support: e.target.value }))} />
+              </div>
+              <div>
+                <Label className="flex items-center gap-1"><Mail className="w-3 h-3" /> Email de soporte</Label>
+                <Input value={val('support_email')} placeholder="soporte@ejemplo.com"
+                  onChange={e => setForm(f => ({ ...f, support_email: e.target.value }))} />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Hero */}
           <Card>
             <CardHeader className="pb-3">
@@ -114,13 +150,13 @@ export default function SuperAdminSettings() {
           </Card>
 
           {/* Textos */}
-          <Card className="lg:col-span-2">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Type className="w-4 h-4" /> Textos de la Landing
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="space-y-4">
               <div>
                 <Label>Título principal</Label>
                 <Input value={val('hero_title')} onChange={e => setForm(f => ({ ...f, hero_title: e.target.value }))} />
@@ -129,21 +165,47 @@ export default function SuperAdminSettings() {
                 <Label>Texto del botón CTA</Label>
                 <Input value={val('cta_text')} onChange={e => setForm(f => ({ ...f, cta_text: e.target.value }))} />
               </div>
-              <div className="md:col-span-2">
+              <div>
                 <Label>Subtítulo</Label>
                 <Textarea value={val('hero_subtitle')} rows={2}
                   onChange={e => setForm(f => ({ ...f, hero_subtitle: e.target.value }))} />
               </div>
-              <div className="md:col-span-2">
+              <div>
                 <Label>Texto del footer</Label>
                 <Input value={val('footer_text')} onChange={e => setForm(f => ({ ...f, footer_text: e.target.value }))} />
               </div>
             </CardContent>
           </Card>
+
+          {/* FAQ */}
+          <Card className="lg:col-span-2">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span className="flex items-center gap-2"><HelpCircle className="w-4 h-4" /> Preguntas Frecuentes (FAQ)</span>
+                <Button size="sm" variant="outline" onClick={addFaq}><Plus className="w-4 h-4 mr-1" /> Agregar</Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {faqs.length === 0 && <p className="text-muted-foreground text-sm text-center py-4">No hay preguntas frecuentes. Agrega una.</p>}
+              {faqs.map((faq, i) => (
+                <div key={i} className="border border-border rounded-lg p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Input value={faq.question} placeholder="Pregunta"
+                      onChange={e => updateFaq(i, 'question', e.target.value)} className="flex-1" />
+                    <Button variant="ghost" size="icon" onClick={() => removeFaq(i)}>
+                      <Trash2 className="w-4 h-4 text-destructive" />
+                    </Button>
+                  </div>
+                  <Textarea value={faq.answer} placeholder="Respuesta" rows={2}
+                    onChange={e => updateFaq(i, 'answer', e.target.value)} />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="flex justify-end">
-          <Button onClick={handleSave} disabled={saving || Object.keys(form).length === 0}>
+          <Button onClick={handleSave} disabled={saving || !hasChanges}>
             <Save className="w-4 h-4 mr-2" />
             {saving ? 'Guardando...' : 'Guardar cambios'}
           </Button>

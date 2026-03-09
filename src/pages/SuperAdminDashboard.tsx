@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { SuperAdminLayout } from '@/components/SuperAdminLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, CreditCard, Clock, Ban, TrendingUp } from 'lucide-react';
+import { Users, CreditCard, Clock, Ban, TrendingUp, AlertTriangle, MessageSquare } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { format, subDays, parseISO } from 'date-fns';
+import { format, subDays, parseISO, addDays, isBefore } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 interface Tenant {
@@ -14,14 +15,18 @@ interface Tenant {
   slug: string;
   status: string;
   created_at: string;
+  trial_ends_at: string;
 }
 
 export default function SuperAdminDashboard() {
   const [stats, setStats] = useState({ total: 0, trial: 0, active: 0, suspended: 0 });
   const [recent, setRecent] = useState<Tenant[]>([]);
   const [chartData, setChartData] = useState<{ day: string; count: number }[]>([]);
+  const [expiringTrials, setExpiringTrials] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
+    // Fetch tenants
     (supabase as any).from('tenants').select('*').order('created_at', { ascending: false }).then(({ data }: any) => {
       if (!data) return;
       setStats({
@@ -31,22 +36,28 @@ export default function SuperAdminDashboard() {
         suspended: data.filter((t: any) => t.status === 'suspended').length,
       });
       setRecent(data.slice(0, 5));
-
-      // Chart: registrations per day (last 14 days)
+      // Expiring trials (within 7 days)
+      const now = new Date();
+      const soon = addDays(now, 7);
+      setExpiringTrials(data.filter((t: any) => t.status === 'trial' && t.trial_ends_at && isBefore(parseISO(t.trial_ends_at), soon)).length);
+      // Chart
       const days: Record<string, number> = {};
-      for (let i = 13; i >= 0; i--) {
-        days[format(subDays(new Date(), i), 'yyyy-MM-dd')] = 0;
-      }
-      data.forEach((t: any) => {
-        const d = t.created_at?.slice(0, 10);
-        if (d && days[d] !== undefined) days[d]++;
-      });
-      setChartData(Object.entries(days).map(([day, count]) => ({
-        day: format(parseISO(day), 'dd MMM', { locale: es }),
-        count,
-      })));
+      for (let i = 13; i >= 0; i--) days[format(subDays(new Date(), i), 'yyyy-MM-dd')] = 0;
+      data.forEach((t: any) => { const d = t.created_at?.slice(0, 10); if (d && days[d] !== undefined) days[d]++; });
+      setChartData(Object.entries(days).map(([day, count]) => ({ day: format(parseISO(day), 'dd MMM', { locale: es }), count })));
     });
+    // Fetch unread messages
+    (supabase as any).from('support_messages')
+      .select('id', { count: 'exact', head: true })
+      .eq('sender_type', 'tenant').eq('is_read', false)
+      .then(({ count }: any) => setUnreadMessages(count || 0));
   }, []);
+
+  const statusColor: Record<string, string> = {
+    trial: 'bg-amber-100 text-amber-700',
+    active: 'bg-green-100 text-green-700',
+    suspended: 'bg-red-100 text-red-700',
+  };
 
   const cards = [
     { title: 'Total', value: stats.total, icon: Users, color: 'text-primary' },
@@ -54,12 +65,6 @@ export default function SuperAdminDashboard() {
     { title: 'Activos', value: stats.active, icon: CreditCard, color: 'text-green-500' },
     { title: 'Suspendidos', value: stats.suspended, icon: Ban, color: 'text-destructive' },
   ];
-
-  const statusColor: Record<string, string> = {
-    trial: 'bg-amber-100 text-amber-700',
-    active: 'bg-green-100 text-green-700',
-    suspended: 'bg-red-100 text-red-700',
-  };
 
   return (
     <SuperAdminLayout>
@@ -83,6 +88,36 @@ export default function SuperAdminDashboard() {
           ))}
         </div>
 
+        {/* Alert cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {expiringTrials > 0 && (
+            <Link to="/superadmin/licencias">
+              <Card className="border-amber-300 hover:shadow-md transition-shadow cursor-pointer">
+                <CardContent className="py-4 px-4 flex items-center gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-500" />
+                  <div>
+                    <p className="font-semibold text-sm">Trials por vencer</p>
+                    <p className="text-xs text-muted-foreground">{expiringTrials} trial(s) expiran en los próximos 7 días</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
+          {unreadMessages > 0 && (
+            <Link to="/superadmin/mensajes">
+              <Card className="border-primary/30 hover:shadow-md transition-shadow cursor-pointer">
+                <CardContent className="py-4 px-4 flex items-center gap-3">
+                  <MessageSquare className="w-5 h-5 text-primary" />
+                  <div>
+                    <p className="font-semibold text-sm">Mensajes sin leer</p>
+                    <p className="text-xs text-muted-foreground">{unreadMessages} mensaje(s) pendientes de respuesta</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Chart */}
           <Card>
@@ -97,7 +132,7 @@ export default function SuperAdminDashboard() {
                   <XAxis dataKey="day" tick={{ fontSize: 10 }} interval="preserveStartEnd" />
                   <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={24} />
                   <Tooltip />
-                  <Bar dataKey="count" fill="hsl(340, 65%, 65%)" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
